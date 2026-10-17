@@ -1,10 +1,15 @@
 {
   "pkgId": "liuxin.combatfx",
-  "name": "武器打击反馈（测试版）",
+  "name": "武器打击反馈·木剑连段测试",
   "author": "liuxin",
-  "description": "KernelLoader 原生打击反馈：本地有效命中粒子、轻微震屏和特效限流。目标 Android 1.4.5.8.6，需实机验证。",
-  "version": "0.1.0",
-  "versionCode": 1,
+  "description": "KernelLoader 原生打击反馈。单人普通重力下木剑三段循环：正向横扫、反向横扫、竖劈；同步命中窗口，800毫秒停手重置。保留命中粒子与轻微震屏。蓄力后续加入，目标 Android 1.4.5.8.6，需实机验证。",
+  "version": "0.2.0",
+  "versionCode": 2,
   "dependence": [],
-  "support": {"android": {"arm64": true, "arm": true}}
+  "support": {
+    "android": {
+      "arm64": true,
+      "arm": true
+    }
+  }
 }

@@ -15,6 +15,7 @@ for abi, elf_class, machine in [('arm64', 2, 183), ('arm', 1, 40)]:
     assert struct.unpack_from('<H', data, 16)[0] == 3, f'{name}: not shared ELF'
     assert struct.unpack_from('<H', data, 18)[0] == machine, f'{name}: wrong machine'
     required[f'Resources/lib/{name}'] = data
+required['Resources/LICENSES/Dobby-Apache-2.0.txt'] = (root / 'include' / 'Dobby-LICENSE').read_bytes()
 for name in ['Info.json', 'Manifest.json', 'mod.json']:
     required[name] = (root / name).read_bytes()
     json.loads(required[name])

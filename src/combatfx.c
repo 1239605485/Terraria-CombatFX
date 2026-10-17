@@ -12,10 +12,12 @@
 #include "mod_core.h"
 #include "mod_logger.h"
 #include "limits.h"
+#include "combo_math.h"
+#include "patchlib/struct/array.h"
 
 // API slots are populated by TEFKernel's shared plugin registration.
 void (*mod_logger_write)(mod_log_level_t, const char *, const char *, ...) = NULL;
-typedef struct { float x, y; } Vec2;
+typedef FxPoint Vec2;
 // This mobile build's XNA Color layout is A,B,G,R, not desktop PackedValue.
 typedef struct { uint8_t a, b, g, r; } Color;
 _Static_assert(sizeof(Vec2) == 8, "Vector2 ABI");
@@ -89,6 +91,8 @@ static bool playing(void) {
     patchlib_field_get_value(f_netmode, NULL, &mode);
     return mode != 2;
 }
+#include "wood_combo.inc"
+
 static void restore_camera(void) {
     if (!offset_applied || !get_screen || !set_screen) return;
     Vec2 current = get_screen(m_screen);
@@ -119,6 +123,7 @@ static void camera_postfix(patch_handle_t instance, void **args, void *result, c
 }
 static void hit_postfix(patch_handle_t npc, void **args, void *result, const patch_method_signature_t *sig) {
     (void)sig;
+    wood_record_hit(npc, result);
     if (!enabled || busy || !npc || !args || !result || *(int *)result <= 0) return;
     if (!args[0] || !args[3] || !args[4] || !args[5]) return;
     if (*(int *)args[0] <= 0 || *(bool *)args[4] || !playing()) return;
@@ -170,7 +175,7 @@ static void init_mod(kernel_mod_handle_t *handle) {
         char path[1024]; int n = snprintf(path, sizeof(path), "%s/combatfx_runtime.log", handle->private_dir);
         if (n > 0 && (size_t)n < sizeof(path)) runtime_log = fopen(path, "w");
     }
-    note("CombatFX 0.1.0 Android test build; target runtime 1.4.5.8.6. No item registration.");
+    note("CombatFX 0.2.0 Android test build; target runtime 1.4.5.8.6. No item registration.");
     if (!api_ready()) { note("Disabled: required kernel API unavailable."); return; }
     patch_handle_t main_type = patchlib_type_get_type("Terraria", "Main");
     patch_handle_t npc_type = patchlib_type_get_type("Terraria", "NPC");
@@ -221,11 +226,13 @@ static void init_mod(kernel_mod_handle_t *handle) {
         note("Disabled: could not install hit hook."); return;
     }
     enabled = true;
+    wood_init(main_type, entity);
     note(camera_hook == PATCH_HOOK_INVALID_ID ? "Ready: particles only; camera API unavailable." :
          "Ready: particles + camera; 90 particles/sec budget, 12 burst capacity, 65ms per-target cooldown.");
 }
 static void cleanup_mod(kernel_mod_handle_t *handle) {
     (void)handle;
+    wood_cleanup();
     enabled = false;
     if (patchlib_uninstall_hook) {
         if (hit_hook != PATCH_HOOK_INVALID_ID) patchlib_uninstall_hook(hit_hook);
@@ -239,7 +246,7 @@ static void cleanup_mod(kernel_mod_handle_t *handle) {
     if (runtime_log) { fclose(runtime_log); runtime_log = NULL; }
 }
 static kernel_mod_info_t *get_info(void) {
-    static kernel_mod_info_t info = {"liuxin.combatfx", 1, 1, "0.1.0"}; return &info;
+    static kernel_mod_info_t info = {"liuxin.combatfx", 2, 1, "0.2.0"}; return &info;
 }
 kernel_mod_ops_t *create_kernel_mod(void) {
     static kernel_mod_ops_t ops = {init_mod, cleanup_mod, get_info}; return &ops;
