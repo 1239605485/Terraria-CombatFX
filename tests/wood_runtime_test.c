@@ -13,6 +13,7 @@ static int draw_object, cache_object, cache_count;
 static Vec2 draw_position = {90,80}, draw_location = {4,5};
 static float live_scale = 1, draw_arm;
 static WoodDrawData cache_data[16];
+static Color item_light={255,255,255,255};
 static int arm_calls;
 static patch_handle_t fake(unsigned n) { return (void *)(uintptr_t)n; }
 static int local(const void *m) { (void)m; return 0; }
@@ -63,6 +64,7 @@ static void get(patch_handle_t f, patch_handle_t p, void *out) {
     else if (f == wood_view.item_scale) *(float *)out = live_scale;
     else if (f == wood_view.arm_rotation) *(float *)out = draw_arm;
     else if (f == wood_view.shadow) *(float *)out = 0;
+    else if (f == wood_view.item_color) *(Color *)out = item_light;
     else if (f == wood_view.count) *(int *)out = cache_count;
     else if (f == wood_view.cache) *(void **)out = &cache_object;
     else if (f == wood_view.player_width) *(int *)out = 20;
@@ -166,6 +168,7 @@ int main(void) {
     wood_view.location = fake(26); wood_view.position = fake(27);
     wood_view.effect_original = effect_layer_original;
     wood_view.player_width = fake(28); wood_view.player_height = fake(29);
+    wood_view.item_color = fake(30);
     animation = 0; item_rotation = 0.23f; item_location = (Vec2){2,3};
     fx_combo_reset(&wood.combo); cache_count = 0;
     wood_native_draw(&draw_object,NULL);
@@ -219,6 +222,20 @@ int main(void) {
     cache_count=0; effect_original_called=0;
     wood_native_effect_draw(&draw_object,NULL);
     assert(effect_original_called==1 && cache_count==3);
+    // Non-emissive wooden-sword trails disappear in darkness, inherit torch
+    // hue and use premultiplied RGB on every layer (no bright orange halo).
+    item_light=(Color){255,0,0,0}; cache_count=0;
+    wood_native_effect_draw(&draw_object,NULL); assert(cache_count==0);
+    item_light=(Color){255,30,70,120}; cache_count=0;
+    wood_native_effect_draw(&draw_object,NULL); assert(cache_count==3);
+    for(int layer=0;layer<3;layer++) {
+        Color c=cache_data[layer].color;
+        assert(c.r<=c.a && c.g<=c.a && c.b<=c.a);
+        assert(c.r>c.g && c.g>c.b && c.a<80);
+    }
+    item_light=(Color){255,255,255,255}; cache_count=0;
+    wood_native_effect_draw(&draw_object,NULL);
+    assert(cache_count==3 && cache_data[1].color.a>80);
     screen_value=(Vec2){0,0};
     wood.sample_active=false; cache_count=0;
     wood_vfx_emit(&draw_object,&player_object,(Vec2){0,0}); assert(cache_count==0);

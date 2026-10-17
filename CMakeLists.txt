@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(CombatFX VERSION 0.4.6 LANGUAGES C)
+project(CombatFX VERSION 0.4.7 LANGUAGES C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 if(ANDROID)

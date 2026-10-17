@@ -46,6 +46,19 @@ static void wood_vfx_load(void) {
     note("CC0 tbbk slash sheet uploaded: 9 frames, 64x47 each.");
 }
 
+// Normal alpha blending needs premultiplied tint RGB, including the outer layer.
+// Use the same ambient itemColor as the non-emissive wooden sword. Fade alpha
+// with light as well, so an unlit trail neither glows nor stamps a black arc.
+static Color wood_vfx_lit_color(Color light,float opacity,uint8_t r,uint8_t g,uint8_t b) {
+    unsigned peak=light.r;
+    if (light.g>peak) peak=light.g;
+    if (light.b>peak) peak=light.b;
+    float factor=fx_clamp(opacity,0,1)*light.a/255.0f;
+    return (Color){(uint8_t)(peak*factor),
+        (uint8_t)(light.b*factor*b/255.0f),
+        (uint8_t)(light.g*factor*g/255.0f),
+        (uint8_t)(light.r*factor*r/255.0f)};
+}
 static void wood_vfx_emit(void *drawinfo, void *player, Vec2 draw_offset) {
     (void)draw_offset; // PlayerDrawSet's screen-space offset is already represented by Main.screenPosition.
     if (!slash.ready || !wood.sample_active || !wood.combo.running) return;
@@ -72,15 +85,16 @@ static void wood_vfx_emit(void *drawinfo, void *player, Vec2 draw_offset) {
                    wood.visual_hand.y+sinf(blade_angle)*length*0.48f-screen.y};
     Vec2 origin={32,23.5f};
     Vec2 scale={length*0.92f/64,length*(stage==0 ? 0.34f : 0.55f)/47};
-    uint8_t value = (uint8_t)(255*opacity);
+    Color light={0};
+    patchlib_field_get_value(wood_view.item_color,drawinfo,&light);
+    Color tint=wood_vfx_lit_color(light,opacity,255,255,255);
+    if (tint.a<3) return;
     int flip=((stage==2) != (direction<0)) ? 2 : 0;
     // Follow the layered sword trail used by tModLoader's Excalibur example:
     // broad low-opacity color, the full slash, then a narrow bright core.
     // Keep this to three cached sprites per active swing for mobile performance.
-    Color outer={(uint8_t)(value*0.34f),48,128,255};
-    Color tint={value,value,value,value};
-    uint8_t core_alpha=(uint8_t)(value*0.52f);
-    Color core={core_alpha,core_alpha,core_alpha,core_alpha};
+    Color outer=wood_vfx_lit_color(light,opacity*0.34f,255,128,48);
+    Color core=wood_vfx_lit_color(light,opacity*0.52f,255,255,255);
     Vec2 outer_scale={scale.x*1.10f,scale.y*1.14f};
     Vec2 core_scale={scale.x*0.72f,scale.y*0.58f};
     void *entry=wood_view.add(drawinfo,wood_view.madd);

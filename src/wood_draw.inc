@@ -19,7 +19,7 @@ static struct {
     WoodDrawOriginal original, effect_original;
     WoodAddDraw add;
     WoodSetDraw set;
-    patch_handle_t madd, mset;
+    patch_handle_t madd, mset, item_color;
     patch_handle_t player, position, location, arm_rotation, shadow, cache, count, item_scale, player_width, player_height;
 } wood_view;
 #include "vfx_runtime.inc"
@@ -140,6 +140,7 @@ static void wood_draw_init(patch_handle_t main_type, patch_handle_t player, patc
     wood_view.location = patchlib_type_get_field(set,"ItemLocation");
     wood_view.arm_rotation = field(set,"compositeFrontArmRotation",sizeof(float),false);
     wood_view.shadow = field(set,"shadow",sizeof(float),false);
+    wood_view.item_color = field(set,"itemColor",sizeof(Color),false);
     wood_view.cache = field(set,"DrawDataCache",sizeof(void *),false);
     wood_view.count = field(set,"DrawDataCacheCount",sizeof(int),false);
     wood_view.item_scale = field(item,"scale",sizeof(float),false);
@@ -152,7 +153,7 @@ static void wood_draw_init(patch_handle_t main_type, patch_handle_t player, patc
     wood_view.madd = method(set,"AddDrawData",true,PATCH_POINTER,NULL,0);
     wood_view.mset = wood_overload(data,"Set",set_args,8);
     if (!draw || !effect_draw || !wood_view.madd || !wood_view.mset || !wood_view.player || !wood_view.position || !wood_view.location ||
-        !wood_view.arm_rotation || !wood_view.shadow || !wood_view.cache || !wood_view.count || !wood_view.item_scale ||
+        !wood_view.arm_rotation || !wood_view.shadow || !wood_view.item_color || !wood_view.cache || !wood_view.count || !wood_view.item_scale ||
         !wood_view.player_width || !wood_view.player_height) { note("Wood draw override unavailable: field/method mismatch."); return; }
     wood_view.add = (WoodAddDraw)patchlib_method_get_pointer(wood_view.madd);
     wood_view.set = (WoodSetDraw)patchlib_method_get_pointer(wood_view.mset);
