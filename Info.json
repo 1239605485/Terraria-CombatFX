@@ -1,0 +1,15 @@
+{
+  "pkgId": "liuxin.combatfx",
+  "name": "全游戏打击与环境特效测试",
+  "author": "liuxin",
+  "description": "模块化全局效果：命中冲击环、敌人死亡爆散、生物群系氛围粒子；ARM64。",
+  "version": "0.4.4",
+  "versionCode": 8,
+  "dependence": [],
+  "support": {
+    "android": {
+      "arm64": true,
+      "arm": false
+    }
+  }
+}
