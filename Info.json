@@ -1,10 +1,10 @@
 {
   "pkgId": "liuxin.combatfx",
-  "name": "武器打击反馈·四类武器动作测试",
+  "name": "全游戏打击与环境特效测试",
   "author": "liuxin",
-  "description": "木剑连击、铁阔剑重砍、铜短剑快刺、长矛突刺；三层强光刀痕。仅 ARM64。",
-  "version": "0.4.3",
-  "versionCode": 7,
+  "description": "模块化全局效果：命中冲击环、敌人死亡爆散、生物群系氛围粒子；ARM64。",
+  "version": "0.4.4",
+  "versionCode": 8,
   "dependence": [],
   "support": {
     "android": {

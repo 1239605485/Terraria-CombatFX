@@ -11,9 +11,9 @@
 #include "patchlib/field.h"
 #include "mod_core.h"
 #include "mod_logger.h"
-#include "effect_budget.h"
 #include "combo_math.h"
 #include "combatfx_internal.h"
+#include "global_fx.h"
 #include "patchlib/struct/array.h"
 #include "terraria/texture2d.h"
 #include "vfx_image.h"
@@ -28,14 +28,12 @@ GetInt get_player, get_width, get_height;
 GetBool get_menu;
 NewDust new_dust;
 patch_handle_t m_center, m_screen, m_set_screen, m_player, m_width, m_height, m_menu, m_dust;
-patch_handle_t f_id, f_friendly, f_netmode, f_dust_count;
+patch_handle_t f_id, f_friendly, f_netmode, f_dust_count, f_life;
 static patch_hook_id_t hit_hook = PATCH_HOOK_INVALID_ID, camera_hook = PATCH_HOOK_INVALID_ID;
-static FxBudget budget;
 static bool enabled, busy, first_hit, offset_applied;
 static Vec2 camera_base, camera_written;
 static uint64_t shake_until, shake_start;
 static float shake_strength;
-static uint32_t random_state = 0x7b913d45u;
 static FILE *runtime_log;
 char mod_resource_dir[1024];
 
@@ -47,12 +45,6 @@ uint64_t now_ms(void) {
 void note(const char *message) {
     if (mod_logger_write) mod_logger_write(MOD_LOG_LEVEL_INFO, "CombatFX", "%s", message);
     if (runtime_log) { fprintf(runtime_log, "%s\n", message); fflush(runtime_log); }
-}
-static float random_signed(void) {
-    random_state ^= random_state << 13;
-    random_state ^= random_state >> 17;
-    random_state ^= random_state << 5;
-    return (float)(random_state & 65535u) / 32767.5f - 1.0f;
 }
 bool match(patch_handle_t method, bool instance, patch_type_t result,
                   const patch_type_t *types, size_t count) {
@@ -102,8 +94,9 @@ static bool camera_prefix(patch_handle_t instance, void **args, const patch_meth
 static void camera_postfix(patch_handle_t instance, void **args, void *result, const patch_method_signature_t *sig) {
     (void)instance; (void)args; (void)sig; (void)result;
     if (!enabled) return;
-    if (!playing()) { shake_until = 0; fx_budget_reset(&budget); return; }
+    if (!playing()) { shake_until = 0; fx_global_reset(); return; }
     uint64_t now = now_ms();
+    fx_global_tick(now);
     if (now >= shake_until || now < shake_start) return;
     float remaining = (float)(shake_until - now) / 100.0f;
     float phase = (float)(now - shake_start);
@@ -114,47 +107,47 @@ static void camera_postfix(patch_handle_t instance, void **args, void *result, c
     set_screen(camera_written, m_set_screen);
     offset_applied = true;
 }
+static bool global_particle_sink(const FxParticle *particle) {
+    if(!enabled || !new_dust || !particle || !isfinite(particle->position.x) || !isfinite(particle->position.y) ||
+       !isfinite(particle->velocity_x) || !isfinite(particle->velocity_y) ||
+       !isfinite(particle->scale) || particle->scale<0.1f || particle->scale>2.0f) return false;
+    int active=0;
+    if(f_dust_count) patchlib_field_get_value(f_dust_count,NULL,&active);
+    if(active>=560) return false;
+    Color color={0,0,0,0};
+    Vec2 pos={particle->position.x,particle->position.y};
+    return new_dust(pos,2,2,particle->dust_type,particle->velocity_x,particle->velocity_y,
+        particle->alpha,color,particle->scale,m_dust)>=0;
+}
 static void hit_postfix(patch_handle_t npc, void **args, void *result, const patch_method_signature_t *sig) {
     (void)sig;
-    weapon_modules_on_hit(npc, result);
-    if (!enabled || busy || !npc || !args || !result || *(int *)result <= 0) return;
-    if (!args[0] || !args[3] || !args[4] || !args[5]) return;
-    if (*(int *)args[0] <= 0 || *(bool *)args[4] || !playing()) return;
-    int local = get_player(m_player);
-    if (local < 0 || local >= 255 || *(int *)args[5] != local) return;
-    bool friendly = false;
-    patchlib_field_get_value(f_friendly, npc, &friendly);
-    if (friendly) return;
-    int id = -1;
-    patchlib_field_get_value(f_id, npc, &id);
-    // Avoid field_get_size's struct fall-through bug on 32-bit kernels.
-    Vec2 center = get_center(npc, m_center);
-    if (!isfinite(center.x) || !isfinite(center.y)) return;
-    Vec2 screen = get_screen(m_screen);
-    int sw = get_width(m_width), sh = get_height(m_height);
-    if (sw <= 0 || sh <= 0 || center.x < screen.x - 32 || center.x > screen.x + sw + 32 ||
-        center.y < screen.y - 32 || center.y > screen.y + sh + 32) return;
-    bool crit = *(bool *)args[3];
-    unsigned count = crit ? 5u : 3u;
-    uint64_t now = now_ms();
-    if (!fx_budget_take(&budget, now, id, count)) return;
-    int active_dust = 0;
-    if (f_dust_count) patchlib_field_get_value(f_dust_count, NULL, &active_dust);
-    busy = true;
-    if (active_dust < 600) {
-        // Vanilla GoldFlame (228), with a small bounded burst. Default color preserves vanilla tint.
-        Color color = {0, 0, 0, 0};
-        Vec2 origin = {center.x - 3, center.y - 3};
-        for (unsigned i = 0; i < count; ++i)
-            new_dust(origin, 6, 6, 228, random_signed() * 1.7f,
-                     -0.6f + random_signed() * 1.4f, 80, color, crit ? 0.95f : 0.7f, m_dust);
+    weapon_modules_on_hit(npc,result);
+    if(!enabled || busy || !npc || !args || !result || *(int *)result<=0) return;
+    if(!args[0] || !args[3] || !args[4] || !args[5]) return;
+    if(*(int *)args[0]<=0 || *(bool *)args[4] || !playing()) return;
+    int local=get_player(m_player);
+    if(local<0 || local>=255 || *(int *)args[5]!=local) return;
+    bool friendly=false;
+    patchlib_field_get_value(f_friendly,npc,&friendly);
+    if(friendly) return;
+    int id=-1; patchlib_field_get_value(f_id,npc,&id);
+    Vec2 center=get_center(npc,m_center);
+    if(!isfinite(center.x) || !isfinite(center.y)) return;
+    Vec2 screen=get_screen(m_screen);
+    int sw=get_width(m_width),sh=get_height(m_height);
+    if(sw<=0 || sh<=0 || center.x<screen.x-32 || center.x>screen.x+sw+32 ||
+       center.y<screen.y-32 || center.y>screen.y+sh+32) return;
+    int life=1; bool lethal=false;
+    if(f_life) { patchlib_field_get_value(f_life,npc,&life); lethal=life<=0; }
+    FxNpcHit event={id,*(int *)result,{center.x,center.y},*(bool *)args[3],lethal,now_ms()};
+    busy=true;
+    bool emitted=fx_global_npc_hit(&event);
+    if(emitted && camera_hook!=PATCH_HOOK_INVALID_ID && event.at_ms>=shake_until) {
+        shake_start=event.at_ms; shake_until=event.at_ms+100;
+        shake_strength=event.critical?2.0f:1.1f;
     }
-    // Short non-stacking shake. Repeated hits do not extend an active impulse.
-    if (camera_hook != PATCH_HOOK_INVALID_ID && now >= shake_until) {
-        shake_start = now; shake_until = now + 100; shake_strength = crit ? 2.0f : 1.1f;
-    }
-    busy = false;
-    if (!first_hit) { first_hit = true; note("First local hit accepted; effects active."); }
+    busy=false;
+    if(emitted && !first_hit) {first_hit=true;note("First global impact event accepted; impact/death effects active.");}
 }
 static bool api_ready(void) {
     return patchlib_type_get_type && patchlib_type_get_field && patchlib_type_get_method_by_param_count &&
@@ -170,7 +163,7 @@ static void init_mod(kernel_mod_handle_t *handle) {
         char path[1024]; int n = snprintf(path, sizeof(path), "%s/combatfx_runtime.log", handle->private_dir);
         if (n > 0 && (size_t)n < sizeof(path)) runtime_log = fopen(path, "w");
     }
-    note("CombatFX 0.4.1 Android test build; target runtime 1.4.5.8.6. No item registration.");
+    note("CombatFX 0.4.4 Android test build; global impact, death and biome ambience modules enabled.");
     if (!api_ready()) { note("Disabled: required kernel API unavailable."); return; }
     patch_handle_t main_type = patchlib_type_get_type("Terraria", "Main");
     patch_handle_t npc_type = patchlib_type_get_type("Terraria", "NPC");
@@ -180,6 +173,7 @@ static void init_mod(kernel_mod_handle_t *handle) {
     f_friendly = field(npc_type, "friendly", sizeof(bool), false);
     f_netmode = field(main_type, "netMode", sizeof(int), true);
     f_dust_count = field(dust, "activeDustCount", sizeof(int), true);
+    f_life = field(npc_type, "life", sizeof(int), false);
     m_center = method(entity, "get_Center", true, PATCH_STRUCT, NULL, 0);
     m_screen = method(main_type, "get_screenPosition", false, PATCH_STRUCT, NULL, 0);
     m_player = method(main_type, "get_myPlayer", false, PATCH_INT32, NULL, 0);
@@ -213,7 +207,7 @@ static void init_mod(kernel_mod_handle_t *handle) {
         set_screen = (SetVec)patchlib_method_get_pointer(m_set_screen);
         if (set_screen) camera_hook = patchlib_install_prepost_hook(camera, camera_prefix, camera_postfix);
     }
-    fx_budget_reset(&budget);
+    fx_global_bind(global_particle_sink);
     hit_hook = patchlib_install_prepost_hook(strike, NULL, hit_postfix);
     if (hit_hook == PATCH_HOOK_INVALID_ID) {
         if (camera_hook != PATCH_HOOK_INVALID_ID) patchlib_uninstall_hook(camera_hook);
@@ -221,13 +215,15 @@ static void init_mod(kernel_mod_handle_t *handle) {
         note("Disabled: could not install hit hook."); return;
     }
     enabled = true;
+    fx_global_init(main_type,patchlib_type_get_type("Terraria","Player"));
     weapon_modules_init(main_type, entity);
     note(camera_hook == PATCH_HOOK_INVALID_ID ? "Ready: particles only; camera API unavailable." :
-         "Ready: particles + camera; 90 particles/sec budget, 12 burst capacity, 65ms per-target cooldown.");
+         "Ready: global hit/death effects, capped biome ambience + camera feedback.");
 }
 static void cleanup_mod(kernel_mod_handle_t *handle) {
     (void)handle;
     weapon_modules_cleanup();
+    fx_global_shutdown();
     enabled = false;
     if (patchlib_uninstall_hook) {
         if (hit_hook != PATCH_HOOK_INVALID_ID) patchlib_uninstall_hook(hit_hook);
@@ -236,12 +232,11 @@ static void cleanup_mod(kernel_mod_handle_t *handle) {
     hit_hook = camera_hook = PATCH_HOOK_INVALID_ID;
     // Do not invoke game methods while a mod is being unloaded on another thread.
     offset_applied = false; shake_until = 0; busy = false; first_hit = false;
-    fx_budget_reset(&budget);
     note("CombatFX unloaded.");
     if (runtime_log) { fclose(runtime_log); runtime_log = NULL; }
 }
 static kernel_mod_info_t *get_info(void) {
-    static kernel_mod_info_t info = {"liuxin.combatfx", 5, 1, "0.4.1"}; return &info;
+    static kernel_mod_info_t info = {"liuxin.combatfx", 5, 1, "0.4.4"}; return &info;
 }
 kernel_mod_ops_t *create_kernel_mod(void) {
     static kernel_mod_ops_t ops = {init_mod, cleanup_mod, get_info}; return &ops;
