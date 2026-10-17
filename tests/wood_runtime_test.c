@@ -192,21 +192,25 @@ int main(void) {
         facing=dir; wood.combo.stage=stage; wood.combo.running=true;
         wood.sample_active=true; wood.visual_progress=0.4f;
         cache_count=0; wood_vfx_emit(&draw_object,&player_object,(Vec2){0,0});
-        assert(cache_count==1 && cache_data[0].texture==fake(100+(unsigned)fx_clamp(fx_swing_fraction(stage,0.4f)*9,0,8)));
+        assert(cache_count==3 && cache_data[1].texture==fake(100+(unsigned)fx_clamp(fx_swing_fraction(stage,0.4f)*9,0,8)));
         assert(cache_data[0].effect==(((stage==2)!=(dir<0)) ? 2 : 0));
-        assert(cache_data[0].scale.x>0 && cache_data[0].color.a>0 && cache_data[0].color.a<=158);
+        assert(cache_data[1].effect==cache_data[0].effect && cache_data[2].effect==cache_data[0].effect);
+        assert(cache_data[0].scale.x>cache_data[1].scale.x && cache_data[2].scale.x<cache_data[1].scale.x);
+        assert(cache_data[0].color.a>0 && cache_data[1].color.a>cache_data[0].color.a && cache_data[1].color.a<=158);
+        assert(cache_data[2].color.a>0 && cache_data[2].color.a<cache_data[1].color.a);
         FxPose pose=fx_pose(stage,0.4f);
         float expected=fx_world_angle(pose.angle,dir);
-        assert(fabsf(cache_data[0].rotation-(expected+FX_PI*0.5f))<1e-5f);
-        assert(fabsf(cache_data[0].position.x-(wood.visual_hand.x+cosf(expected)*wood.length*wood.visual_stretch*0.48f))<1e-4f);
+        assert(fabsf(cache_data[1].rotation-(expected+FX_PI*0.5f))<1e-5f);
+        assert(fabsf(cache_data[1].position.x-(wood.visual_hand.x+cosf(expected)*wood.length*wood.visual_stretch*0.48f))<1e-4f);
     }
     // Camera movement converts the world-space hand once; the held-item draw offset must not be added again.
     screen_value=(Vec2){320,180}; cache_count=0;
     wood_vfx_emit(&draw_object,&player_object,(Vec2){-320,-180});
     FxPose camera_pose=fx_pose(wood.combo.stage,wood.visual_progress);
     float camera_angle=fx_world_angle(camera_pose.angle,facing);
-    assert(fabsf(cache_data[0].position.x-(wood.visual_hand.x+cosf(camera_angle)*wood.length*wood.visual_stretch*0.48f-320))<1e-4f);
-    assert(fabsf(cache_data[0].position.y-(wood.visual_hand.y+sinf(camera_angle)*wood.length*wood.visual_stretch*0.48f-180))<1e-4f);
+    assert(cache_count==3);
+    assert(fabsf(cache_data[1].position.x-(wood.visual_hand.x+cosf(camera_angle)*wood.length*wood.visual_stretch*0.48f-320))<1e-4f);
+    assert(fabsf(cache_data[1].position.y-(wood.visual_hand.y+sinf(camera_angle)*wood.length*wood.visual_stretch*0.48f-180))<1e-4f);
     screen_value=(Vec2){0,0};
     wood.sample_active=false; cache_count=0;
     wood_vfx_emit(&draw_object,&player_object,(Vec2){0,0}); assert(cache_count==0);
