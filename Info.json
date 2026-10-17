@@ -1,0 +1,10 @@
+{
+  "pkgId": "liuxin.combatfx",
+  "name": "武器打击反馈（测试版）",
+  "author": "liuxin",
+  "description": "KernelLoader 原生打击反馈：本地有效命中粒子、轻微震屏和特效限流。目标 Android 1.4.5.8.6，需实机验证。",
+  "version": "0.1.0",
+  "versionCode": 1,
+  "dependence": [],
+  "support": {"android": {"arm64": true, "arm": true}}
+}
