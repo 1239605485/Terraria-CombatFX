@@ -9,9 +9,9 @@ static struct {
     FxGCTarget target;
     FxGCFree release;
     patch_handle_t ma, mt, mf;
-    struct { FxGCHandle root; int width,height; bool logged; } sprites[3];
+    struct { FxGCHandle root; int width,height; bool logged; } sprites[9];
 } slash;
-static const char *slash_names[] = {"slash-forward.png","slash-down.png","slash-up.png"};
+static const char *slash_name="slash-tbbk.png";
 static void wood_vfx_init(void) {
     if (!terraria_texture2d_create || !mod_resource_dir[0]) { note("Slash textures disabled: texture API or resource directory missing."); return; }
     patch_handle_t gc = patchlib_type_get_type("System.Runtime.InteropServices","GCHandle");
@@ -29,56 +29,57 @@ static void wood_vfx_init(void) {
 static void wood_vfx_load(void) {
     if (!slash.ready || slash.tried) return;
     slash.tried = true;
-    for (unsigned i = 0; i < 3; ++i) {
-        char path[1400];
-        int n = snprintf(path,sizeof(path),"%s/textures/%s",mod_resource_dir,slash_names[i]);
-        FxImage image;
-        if (n <= 0 || (size_t)n >= sizeof(path) || !fx_image_load(path,256,&image)) {
-            char line[160]; snprintf(line,sizeof(line),"Slash PNG load failed: %s",slash_names[i]); note(line); continue;
-        }
-        void *texture = terraria_texture2d_create(image.width,image.height,TEXTURE_FORMAT_RGBA32,image.pixels,image.size);
-        if (texture) slash.sprites[i].root = slash.alloc(texture,2,slash.ma); // GCHandleType.Normal = 2
-        if (texture && slash.sprites[i].root.value) {
-            slash.sprites[i].width = image.width; slash.sprites[i].height = image.height;
-            char line[180]; snprintf(line,sizeof(line),"Slash PNG loaded: %s -> %dx%d, %zu RGBA bytes",slash_names[i],image.width,image.height,image.size); note(line);
-        } else note("Slash texture creation or rooting failed.");
-        fx_image_free(&image);
+    char path[1400];
+    int n=snprintf(path,sizeof(path),"%s/textures/%s",mod_resource_dir,slash_name);
+    FxImage image;
+    if(n<=0 || (size_t)n>=sizeof(path) || !fx_image_load(path,256,&image)) { note("Slash sheet load failed."); return; }
+    if(image.width!=192 || image.height!=141) { note("Slash sheet dimensions invalid."); fx_image_free(&image); return; }
+    // Preserve the downloaded original; slice its 3x3 grid only during GPU upload.
+    for(unsigned i=0;i<9;i++) {
+        unsigned char pixels[64*47*4];
+        for(unsigned y=0;y<47;y++) memcpy(pixels+y*64*4,image.pixels+((i/3*47+y)*192+i%3*64)*4,64*4);
+        void *texture=terraria_texture2d_create(64,47,TEXTURE_FORMAT_RGBA32,pixels,sizeof(pixels));
+        if(texture) slash.sprites[i].root=slash.alloc(texture,2,slash.ma);
+        slash.sprites[i].width=64; slash.sprites[i].height=47;
     }
+    fx_image_free(&image);
+    note("CC0 tbbk slash sheet uploaded: 9 frames, 64x47 each.");
 }
+
 static void wood_vfx_emit(void *drawinfo, void *player, Vec2 draw_offset) {
     if (!slash.ready || !wood.sample_active || !wood.combo.running) return;
     wood_vfx_load();
     unsigned stage = wood.combo.stage % 3;
-    if (!slash.sprites[stage].root.value) return;
-    void *texture = slash.target(&slash.sprites[stage].root,slash.mt);
-    if (!texture) return;
     float p = fx_swing_fraction(stage,wood.visual_progress);
+    unsigned frame=(unsigned)fx_clamp(p*9,0,8);
+    if (!slash.sprites[frame].root.value) return;
+    void *texture=slash.target(&slash.sprites[frame].root,slash.mt);
+    if(!texture) return;
     float opacity = sinf(p*FX_PI)*0.92f;
     if (opacity < 0.03f) return;
     int direction = 1; patchlib_field_get_value(wood.direction,player,&direction);
     float item_scale = wood.scale(player,wood.held(player,wood.mh),wood.mscale);
     if (!isfinite(item_scale) || item_scale <= 0 || item_scale > 4) return;
-    Vec2 center = get_center(player,m_center), screen = get_screen(m_screen);
-    float width = wood.length*item_scale*(stage == 0 ? 1.15f : 1.25f);
-    float height = wood.length*item_scale*(stage == 0 ? 0.48f : 1.8f);
-    Vec2 position = {center.x + direction*7 - screen.x + draw_offset.x, center.y - screen.y + draw_offset.y};
-    if (stage == 1) position.y += (p-0.5f)*8;
-    if (stage == 2) position.y -= (p-0.5f)*8;
-    int w = slash.sprites[stage].width, h = slash.sprites[stage].height;
-    Vec2 origin = {direction > 0 ? w*0.05f : w*0.95f,h*0.5f};
-    Vec2 scale = {width/w,height/h};
+    Vec2 screen=get_screen(m_screen);
+    FxPose pose=fx_pose(stage,wood.visual_progress);
+    float angle=fx_world_angle(pose.angle,direction);
+    float length=wood.length*item_scale*wood.visual_stretch;
+    Vec2 position={wood.visual_hand.x+cosf(angle)*length*0.48f-screen.x+draw_offset.x,
+                   wood.visual_hand.y+sinf(angle)*length*0.48f-screen.y+draw_offset.y};
+    Vec2 origin={32,23.5f};
+    Vec2 scale={length*1.35f/64,length*(stage==0 ? 0.6f : 1.05f)/47};
     uint8_t value = (uint8_t)(255*opacity);
     Color tint = {value,value,value,value};
     void *entry = wood_view.add(drawinfo,wood_view.madd);
     if (!entry) return;
-    wood_view.set(entry,texture,position,tint,0,origin,scale,direction > 0 ? 0 : 1,0,wood_view.mset);
+    wood_view.set(entry,texture,position,tint,angle,origin,scale,((stage==2) != (direction<0)) ? 2 : 0,0,wood_view.mset);
     if (!slash.sprites[stage].logged) {
         slash.sprites[stage].logged = true;
-        char line[140]; snprintf(line,sizeof(line),"Slash sprite emitted: stage=%u %s",stage+1,slash_names[stage]); note(line);
+        char line[140]; snprintf(line,sizeof(line),"Slash sprite emitted: stage=%u %s",stage+1,slash_name); note(line);
     }
 }
 static void wood_vfx_cleanup(void) {
-    if (slash.release) for (unsigned i = 0; i < 3; ++i)
+    if (slash.release) for (unsigned i = 0; i < 9; ++i)
         if (slash.sprites[i].root.value) slash.release(&slash.sprites[i].root,slash.mf);
     memset(&slash,0,sizeof(slash));
 }

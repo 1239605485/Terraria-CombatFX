@@ -1,4 +1,4 @@
-// Uses the game's held-item layer and vanilla wooden-sword texture. No new assets.
+// Vanilla sword in the held-item layer plus the bundled CC0 animated slash sheet.
 typedef struct {
     void *texture;
     Vec2 position;
@@ -148,5 +148,5 @@ static void wood_draw_init(patch_handle_t main_type, patch_handle_t player, patc
     }
     wood_view.address = address; wood_view.ready = true;
     wood_vfx_init();
-    note("Wood draw override ready: waist carry, first-hit unsheathing, forward/down/up moves with dedicated PNG slash textures.");
+    note("Wood draw override ready: waist carry, first-hit unsheathing, forward/down/up moves with CC0 animated slash frames.");
 }

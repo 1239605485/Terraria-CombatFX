@@ -96,30 +96,19 @@ static bool wood_pose(patch_handle_t player, patch_handle_t item) {
     float progress = fx_swing_progress(animation, maximum);
     float scale = wood.scale(player, item, wood.mscale);
     if (!isfinite(scale) || scale <= 0 || scale > 4) return false;
-    float local_angle = fx_swing_angle(wood.combo.stage, progress);
-    float pose_angle = fx_project_angle(wood.combo.stage, local_angle);
-    if (wood.combo.stage == 0 && progress < 0.26f)
-        pose_angle = 2.55f + (pose_angle - 2.55f) * fx_draw_lift(progress);
-    float world_angle = fx_world_angle(pose_angle, direction);
-    float arm_angle = world_angle - FX_PI * 0.5f;
-    // Full is enum value 0 in this mobile version.
-    wood.arm(player, true, 0, arm_angle, wood.ma);
-    Vec2 hand = wood.hand(player, 0, arm_angle, wood.mhand);
-    if (!isfinite(hand.x) || !isfinite(hand.y) || fabsf(hand.x) > 1e8f || fabsf(hand.y) > 1e8f) return false;
-    if (wood.combo.stage == 0 && progress < 0.26f) {
-        Vec2 center = get_center(player, m_center);
-        float lift = fx_draw_lift(progress);
-        Vec2 hip = {center.x + direction * 5, center.y + 5};
-        hand.x = hip.x + (hand.x - hip.x) * lift;
-        hand.y = hip.y + (hand.y - hip.y) * lift;
-    }
-    if (wood.combo.stage == 0) hand.x += direction*8*fx_swing_fraction(0,progress);
-    float rotation = direction * (pose_angle + FX_PI * 0.25f);
-    wood.visual_hand = hand; wood.visual_rotation = rotation; wood.visual_progress = progress;
-    wood.arm_rotation = arm_angle;
-    wood.visual_stretch = fx_project_length(wood.combo.stage,local_angle);
-    if (wood.combo.stage == 0 && progress < 0.26f)
-        wood.visual_stretch = 0.55f + (wood.visual_stretch - 0.55f) * fx_draw_lift(progress);
+    FxPose pose=fx_pose(wood.combo.stage,progress);
+    float world_angle=fx_world_angle(pose.angle,direction);
+    float arm_angle=world_angle-FX_PI*0.5f;
+    wood.arm(player,true,0,arm_angle,wood.ma);
+    Vec2 hand=wood.hand(player,0,arm_angle,wood.mhand);
+    if (!isfinite(hand.x) || !isfinite(hand.y) || fabsf(hand.x)>1e8f || fabsf(hand.y)>1e8f) return false;
+    Vec2 center=get_center(player,m_center);
+    Vec2 hip={center.x+direction*5,center.y+5};
+    hand.x+=(hip.x-hand.x)*pose.hip+direction*pose.forward;
+    hand.y+=(hip.y-hand.y)*pose.hip;
+    float rotation=direction*(pose.angle+FX_PI*0.25f);
+    wood.visual_hand=hand; wood.visual_rotation=rotation; wood.visual_progress=progress;
+    wood.arm_rotation=arm_angle; wood.visual_stretch=pose.reach;
     void *location = patchlib_field_get_pointer(wood.location, player);
     if (!location) return false;
     // The supplied kernel reports sizeof(void*) for value-type fields on arm32.
@@ -129,16 +118,18 @@ static bool wood_pose(patch_handle_t player, patch_handle_t item) {
     float previous = fmaxf(0.16f, progress - 1.0f / (float)(maximum - 1));
     for (unsigned i = 0; i < FX_SWEEP_SAMPLES; ++i) {
         float t = previous + (progress - previous) * (float)i / (FX_SWEEP_SAMPLES - 1);
-        float a = fx_swing_angle(wood.combo.stage, t);
-        float angle = fx_world_angle(fx_project_angle(wood.combo.stage,a), direction);
-        float reach = wood.length * scale * fx_project_length(wood.combo.stage,a);
+        FxPose sample=fx_pose(wood.combo.stage,t);
+        float angle=fx_world_angle(sample.angle,direction);
+        float reach=wood.length*scale*sample.reach;
         Vec2 h = wood.hand(player, 0, angle - FX_PI * 0.5f, wood.mhand);
         if (!isfinite(h.x) || !isfinite(h.y) || fabsf(h.x) > 1e8f || fabsf(h.y) > 1e8f) return false;
-        if (wood.combo.stage == 0) h.x += direction*8*fx_swing_fraction(0,t);
+        h.x+=(hip.x-h.x)*sample.hip+direction*sample.forward;
+        h.y+=(hip.y-h.y)*sample.hip;
         wood.blades[i].hand = h;
         wood.blades[i].tip = (Vec2){h.x + cosf(angle) * reach, h.y + sinf(angle) * reach};
     }
-    wood.sample_active = fx_swing_active(progress) && (wood.combo.stage != 0 || progress >= 0.26f);
+    float cut=fx_swing_fraction(wood.combo.stage,progress);
+    wood.sample_active = cut>0 && cut<1;
     return true;
 }
 static void wood_begin(patch_handle_t player, void **args, void *result, const patch_method_signature_t *sig) {

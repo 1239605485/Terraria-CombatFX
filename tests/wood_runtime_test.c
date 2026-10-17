@@ -178,10 +178,10 @@ int main(void) {
     animation = 11; assert(wood_pose(&player_object,&item_object));
     animation = 21; assert(wood_pose(&player_object,&item_object)); assert(wood.combo.stage == 2);
     assert(wood_process_depth == 0);
-    // Each combo stage submits its own real texture, with left/right mirroring and no idle effect.
+    // Regression: animated frames follow the blade rather than flashing at a fixed player offset.
     get_screen=screen_get; slash.ready=slash.tried=true;
     slash.target=sprite_target; slash.release=sprite_free;
-    for(unsigned i=0;i<3;i++) {
+    for(unsigned i=0;i<9;i++) {
         slash.sprites[i].root.value=(uintptr_t)fake(100+i);
         slash.sprites[i].width=256; slash.sprites[i].height=128;
     }
@@ -189,13 +189,17 @@ int main(void) {
         facing=dir; wood.combo.stage=stage; wood.combo.running=true;
         wood.sample_active=true; wood.visual_progress=0.4f;
         cache_count=0; wood_vfx_emit(&draw_object,&player_object,(Vec2){0,0});
-        assert(cache_count==1 && cache_data[0].texture==fake(100+stage));
-        assert(cache_data[0].effect==(dir<0 ? 1 : 0));
+        assert(cache_count==1 && cache_data[0].texture==fake(100+(unsigned)fx_clamp(fx_swing_fraction(stage,0.4f)*9,0,8)));
+        assert(cache_data[0].effect==(((stage==2)!=(dir<0)) ? 2 : 0));
         assert(cache_data[0].scale.x>0 && cache_data[0].color.a>0);
+        FxPose pose=fx_pose(stage,0.4f);
+        float expected=fx_world_angle(pose.angle,dir);
+        assert(fabsf(cache_data[0].rotation-expected)<1e-5f);
+        assert(fabsf(cache_data[0].position.x-(wood.visual_hand.x+cosf(expected)*wood.length*wood.visual_stretch*0.48f))<1e-4f);
     }
     wood.sample_active=false; cache_count=0;
     wood_vfx_emit(&draw_object,&player_object,(Vec2){0,0}); assert(cache_count==0);
-    wood_vfx_cleanup(); assert(released==3 && !slash.ready);
+    wood_vfx_cleanup(); assert(released==9 && !slash.ready);
     // Regression: crafting a sword must never call the forced idle draw or alter shared item state.
     inventory_is_open=true;
     assert(!wood_can_animate(&player_object,&item_object));

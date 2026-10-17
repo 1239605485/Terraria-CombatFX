@@ -72,6 +72,26 @@ static inline float fx_project_length(unsigned stage, float angle) {
 static inline float fx_draw_lift(float p) {
     float q = fx_clamp(p / 0.26f, 0, 1); return q*q*(3-2*q);
 }
+typedef struct { float angle,reach,forward,hip; } FxPose;
+static inline float fx_ease(float t) { t=fx_clamp(t,0,1); return t*t*(3-2*t); }
+static inline FxPose fx_pose(unsigned stage,float p) {
+    stage%=3;
+    float a=fx_swing_angle(stage,p), q=fx_swing_fraction(stage,p);
+    FxPose pose={fx_project_angle(stage,a),fx_project_length(stage,a),stage==0 ? 8*sinf(q*FX_PI) : 0,0};
+    if(stage==0 && p<0.26f) {
+        float t=fx_draw_lift(p);
+        pose.angle=2.55f+(pose.angle-2.55f)*t;
+        pose.reach=0.55f+(pose.reach-0.55f)*t; pose.hip=1-t;
+    }
+    static const float finish[]={0.76f,0.72f,0.62f};
+    if(p>finish[stage]) {
+        float t=fx_ease((p-finish[stage])/(1-finish[stage]));
+        if(stage==0) { pose.angle+=(-1.35f-pose.angle)*t; pose.reach+=(1-pose.reach)*t; }
+        if(stage==1) pose.angle+=0.16f*sinf(t*FX_PI);
+        if(stage==2) { pose.angle+=(2.55f-2*FX_PI-pose.angle)*t; pose.reach+=(0.55f-pose.reach)*t; pose.hip=t; }
+    }
+    return pose;
+}
 static inline float fx_world_angle(float local_angle, int direction) { return direction > 0 ? local_angle : FX_PI - local_angle; }
 // Clip the blade segment against an expanded NPC rectangle (slab intersection).
 static inline bool fx_blade_intersects(FxBlade s, FxRect r, float padding) {

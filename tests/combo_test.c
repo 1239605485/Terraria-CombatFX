@@ -38,6 +38,20 @@ int main(void) {
         assert(fx_project_length(2,a) == 1);
     }
     assert(fx_draw_lift(0) == 0 && fx_draw_lift(0.26f) == 1);
+    // Every stage's recovery must meet the next entry without a pose/scale jump.
+    for(unsigned stage=0;stage<3;stage++) {
+        FxPose end=fx_pose(stage,1), start=fx_pose((stage+1)%3,0);
+        assert(fabsf(cosf(end.angle)-cosf(start.angle))<1e-5f);
+        assert(fabsf(sinf(end.angle)-sinf(start.angle))<1e-5f);
+        assert(fabsf(end.reach-start.reach)<1e-5f);
+        assert(fabsf(end.forward-start.forward)<1e-5f && fabsf(end.hip-start.hip)<1e-5f);
+        FxPose previous=fx_pose(stage,0);
+        for(int frame=1;frame<=1000;frame++) {
+            FxPose current=fx_pose(stage,frame/1000.0f);
+            assert(fabsf(current.angle-previous.angle)<0.08f);
+            previous=current;
+        }
+    }
     FxBlade blade = {{0,0},{40,0}};
     assert(fx_blade_intersects(blade,(FxRect){20,-2,4,4},0));
     assert(!fx_blade_intersects(blade,(FxRect){20,10,4,4},2));
