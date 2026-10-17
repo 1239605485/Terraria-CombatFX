@@ -138,7 +138,7 @@ static void wood_begin(patch_handle_t player, void **args, void *result, const p
     if (!wood_can_animate(player, item)) { fx_combo_reset(&wood.combo); return; }
     wood_start(wood.slot(player, wood.ms), "actual-use");
     wood.length = 36;
-    if (!wood.logged) { wood.logged = true; note("Wooden sword combo started: forward / reverse / overhead; single-player only."); }
+    if (!wood.logged) { wood.logged = true; note("Wooden sword combo started: forward / downward / upward; single-player only."); }
 }
 static void wood_use_style(patch_handle_t player, void **args, void *result, const patch_method_signature_t *sig) {
     (void)result; (void)sig;

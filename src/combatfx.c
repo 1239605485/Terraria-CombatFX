@@ -11,9 +11,11 @@
 #include "patchlib/field.h"
 #include "mod_core.h"
 #include "mod_logger.h"
-#include "limits.h"
+#include "effect_budget.h"
 #include "combo_math.h"
 #include "patchlib/struct/array.h"
+#include "terraria/texture2d.h"
+#include "vfx_image.h"
 
 // API slots are populated by TEFKernel's shared plugin registration.
 void (*mod_logger_write)(mod_log_level_t, const char *, const char *, ...) = NULL;
@@ -44,6 +46,7 @@ static uint64_t shake_until, shake_start;
 static float shake_strength;
 static uint32_t random_state = 0x7b913d45u;
 static FILE *runtime_log;
+static char mod_resource_dir[1024];
 
 static uint64_t now_ms(void) {
     struct timespec t;
@@ -173,10 +176,12 @@ static bool api_ready(void) {
 static void init_mod(kernel_mod_handle_t *handle) {
     if (enabled) return;
     if (handle && handle->private_dir) {
+        int copied = snprintf(mod_resource_dir,sizeof(mod_resource_dir),"%s",handle->private_dir);
+        if (copied < 0 || (size_t)copied >= sizeof(mod_resource_dir)) mod_resource_dir[0] = 0;
         char path[1024]; int n = snprintf(path, sizeof(path), "%s/combatfx_runtime.log", handle->private_dir);
         if (n > 0 && (size_t)n < sizeof(path)) runtime_log = fopen(path, "w");
     }
-    note("CombatFX 0.3.0 Android test build; target runtime 1.4.5.8.6. No item registration.");
+    note("CombatFX 0.4.0 Android test build; target runtime 1.4.5.8.6. No item registration.");
     if (!api_ready()) { note("Disabled: required kernel API unavailable."); return; }
     patch_handle_t main_type = patchlib_type_get_type("Terraria", "Main");
     patch_handle_t npc_type = patchlib_type_get_type("Terraria", "NPC");
@@ -247,7 +252,7 @@ static void cleanup_mod(kernel_mod_handle_t *handle) {
     if (runtime_log) { fclose(runtime_log); runtime_log = NULL; }
 }
 static kernel_mod_info_t *get_info(void) {
-    static kernel_mod_info_t info = {"liuxin.combatfx", 3, 1, "0.3.0"}; return &info;
+    static kernel_mod_info_t info = {"liuxin.combatfx", 4, 1, "0.4.0"}; return &info;
 }
 kernel_mod_ops_t *create_kernel_mod(void) {
     static kernel_mod_ops_t ops = {init_mod, cleanup_mod, get_info}; return &ops;

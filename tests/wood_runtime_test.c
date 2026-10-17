@@ -81,6 +81,10 @@ static void original_draw(void *draw, const void *m) {
     WoodDrawData *data = add_draw(draw,NULL);
     set_draw(data,&item_object,draw_location,(Color){255,255,255,255},item_rotation,(Vec2){0,32},(Vec2){live_scale,live_scale},0,0,NULL);
 }
+static Vec2 screen_get(const void *m) { (void)m; return (Vec2){0,0}; }
+static int released;
+static void *sprite_target(FxGCHandle *handle,const void *m) { (void)m; return (void *)handle->value; }
+static void sprite_free(FxGCHandle *handle,const void *m) { (void)m; assert(handle->value); ++released; }
 static int processed;
 static void original_process(void *player, void *item, FxRect rect, int damage, float kb, int index, const void *info) {
     (void)player; (void)item; (void)kb; (void)info;
@@ -166,11 +170,29 @@ int main(void) {
     animation = 11; cache_count = 0; wood_native_draw(&draw_object,NULL);
     assert(animation == 11 && live_scale == 1 && cache_count == 1);
     animation = 10; cache_count = 0; wood_native_draw(&draw_object,NULL);
-    assert(animation == 10 && live_scale == 1 && cache_count == 2);
-    assert(cache_data[1].color.a < 100 && wood_view.trail_count <= 3);
+    assert(animation == 10 && live_scale == 1 && cache_count == 1);
+
     animation = 21; assert(wood_pose(&player_object,&item_object)); assert(wood.combo.stage == 1);
     animation = 11; assert(wood_pose(&player_object,&item_object));
     animation = 21; assert(wood_pose(&player_object,&item_object)); assert(wood.combo.stage == 2);
     assert(wood_process_depth == 0);
+    // Each combo stage submits its own real texture, with left/right mirroring and no idle effect.
+    get_screen=screen_get; slash.ready=slash.tried=true;
+    slash.target=sprite_target; slash.release=sprite_free;
+    for(unsigned i=0;i<3;i++) {
+        slash.sprites[i].root.value=(uintptr_t)fake(100+i);
+        slash.sprites[i].width=256; slash.sprites[i].height=128;
+    }
+    for(unsigned stage=0;stage<3;stage++) for(int dir=-1;dir<=1;dir+=2) {
+        facing=dir; wood.combo.stage=stage; wood.combo.running=true;
+        wood.sample_active=true; wood.visual_progress=0.4f;
+        cache_count=0; wood_vfx_emit(&draw_object,&player_object,(Vec2){0,0});
+        assert(cache_count==1 && cache_data[0].texture==fake(100+stage));
+        assert(cache_data[0].effect==(dir<0 ? 1 : 0));
+        assert(cache_data[0].scale.x>0 && cache_data[0].color.a>0);
+    }
+    wood.sample_active=false; cache_count=0;
+    wood_vfx_emit(&draw_object,&player_object,(Vec2){0,0}); assert(cache_count==0);
+    wood_vfx_cleanup(); assert(released==3 && !slash.ready);
     return 0;
 }

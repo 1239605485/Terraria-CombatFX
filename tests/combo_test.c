@@ -15,9 +15,13 @@ int main(void) {
     assert(fx_combo_has_hit(&c, -1) && fx_combo_has_hit(&c, FX_COMBO_NPCS));
     assert(!fx_swing_active(0.0f) && !fx_swing_active(1.0f));
     assert(fx_swing_active(0.5f));
-    assert(fx_swing_angle(0, 0.2f) > fx_swing_angle(0, 0.7f));
+    assert(fx_swing_fraction(0,0.16f)==0 && fx_swing_fraction(0,0.64f)==1);
+    assert(fx_swing_fraction(1,0.20f)==0);
+    assert(fx_swing_fraction(2,0.62f)==1);
+    assert(fx_swing_angle(0, 0.2f) < fx_swing_angle(0, 0.7f));
     assert(fx_swing_angle(1, 0.2f) < fx_swing_angle(1, 0.7f));
-    assert(fx_swing_angle(2, 0.2f) < -1.5f);
+    assert(fx_swing_angle(2, 0.2f) > fx_swing_angle(2, 0.7f));
+    for (unsigned i=0;i<=100;++i) assert(cosf(fx_swing_angle(0,i/100.0f)) > 0);
     assert(fx_swing_progress(21,21) == 0 && fx_swing_progress(1,21) == 1);
     for (unsigned stage = 0; stage < 3; ++stage)
         for (unsigned frame = 0; frame <= 100; ++frame) {

@@ -1,5 +1,5 @@
 #include <assert.h>
-#include "limits.h"
+#include "effect_budget.h"
 int main(void) {
     FxBudget b = {0};
     assert(fx_budget_take(&b, 0, 1, 3));

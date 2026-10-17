@@ -1,10 +1,10 @@
 {
   "pkgId": "liuxin.combatfx",
-  "name": "武器打击反馈·木剑拔刀测试",
+  "name": "武器打击反馈·三式刀光测试",
   "author": "liuxin",
-  "description": "单人正常重力：选中木剑闲置时腰侧携带，首击拔刀横斩，反向横斩与竖劈循环。持剑绘制层修正、原版剑贴图残影；最多3道。保留命中反馈，蓄力尚未加入，需实机验证。",
-  "version": "0.3.0",
-  "versionCode": 3,
+  "description": "单人正常重力：木剑前方横砍→下劈→上挑循环；三张独立透明刀光PNG随招式绘制，运行时最长边256像素缓存。保留腰间拔刀和命中反馈。蓄力未加入，需实机验证。",
+  "version": "0.4.0",
+  "versionCode": 4,
   "dependence": [],
   "support": {
     "android": {

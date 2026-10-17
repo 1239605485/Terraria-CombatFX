@@ -15,6 +15,12 @@ for abi, elf_class, machine in [('arm64', 2, 183), ('arm', 1, 40)]:
     assert struct.unpack_from('<H', data, 16)[0] == 3, f'{name}: not shared ELF'
     assert struct.unpack_from('<H', data, 18)[0] == machine, f'{name}: wrong machine'
     required[f'Resources/lib/{name}'] = data
+for name in ['slash-forward.png','slash-down.png','slash-up.png']:
+    data = (root / 'assets' / 'textures' / name).read_bytes()
+    assert data[:8] == bytes([137,80,78,71,13,10,26,10]), name
+    w,h,depth,color = struct.unpack_from('>IIBB',data,16)
+    assert w > 0 and h > 0 and depth == 8 and color == 6, name
+    required[f'Resources/textures/{name}'] = data
 required['Resources/LICENSES/Dobby-Apache-2.0.txt'] = (root / 'include' / 'Dobby-LICENSE').read_bytes()
 for name in ['Info.json', 'Manifest.json', 'mod.json']:
     required[name] = (root / name).read_bytes()

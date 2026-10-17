@@ -45,20 +45,27 @@ static inline float fx_swing_progress(int remaining, int maximum) {
     return maximum > 1 ? fx_clamp((float)(maximum - remaining) / (float)(maximum - 1), 0, 1) : 1;
 }
 static inline bool fx_swing_active(float p) { return p >= 0.16f && p <= 0.82f; }
-static inline float fx_swing_angle(unsigned stage, float p) {
-    static const float begin[] = {2.55f, -0.40f, -1.90f};
-    static const float end[] = {-0.40f, 2.55f, 1.00f};
+// Short preparation, accelerated cut, then visible recovery; each cut has its own rhythm.
+static inline float fx_swing_fraction(unsigned stage, float p) {
+    static const float start[] = {0.16f,0.22f,0.18f};
+    static const float finish[] = {0.64f,0.72f,0.62f};
     stage %= 3;
-    float q = fx_clamp((p - 0.16f) / 0.66f, 0, 1);
+    return fx_clamp((p-start[stage])/(finish[stage]-start[stage]),0,1);
+}
+static inline float fx_swing_angle(unsigned stage, float p) {
+    static const float begin[] = {-0.70f, -1.35f, 1.35f};
+    static const float end[] = {0.70f, 1.35f, -1.35f};
+    stage %= 3;
+    float q = fx_swing_fraction(stage,p);
     q = q * q * (3 - 2 * q);
     return begin[stage] + (end[stage] - begin[stage]) * q;
 }
 // Side-view projection distinguishes horizontal sweeps from an overhead chop.
 static inline float fx_project_angle(unsigned stage, float angle) {
-    return stage % 3 == 2 ? angle : atan2f(sinf(angle) * 0.22f, cosf(angle));
+    return stage % 3 != 0 ? angle : atan2f(sinf(angle) * 0.22f, cosf(angle));
 }
 static inline float fx_project_length(unsigned stage, float angle) {
-    if (stage % 3 == 2) return 1;
+    if (stage % 3 != 0) return 1;
     float c = cosf(angle), s = sinf(angle) * 0.22f;
     return sqrtf(c*c + s*s);
 }

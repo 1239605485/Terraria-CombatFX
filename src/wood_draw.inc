@@ -21,11 +21,8 @@ static struct {
     WoodSetDraw set;
     patch_handle_t madd, mset;
     patch_handle_t player, position, location, arm_rotation, shadow, cache, count, item_scale, player_width, player_height;
-    struct { Vec2 world; float rotation, stretch; uint64_t at; unsigned stage; } trail[3];
-    unsigned trail_count;
-    float last_progress;
-    unsigned last_stage;
 } wood_view;
+#include "vfx_runtime.inc"
 static bool wood_read_vec(patch_handle_t f, void *object, Vec2 *out) {
     void *p = patchlib_field_get_pointer(f, object);
     if (!p) return false;
@@ -58,6 +55,7 @@ static void wood_native_draw(void *drawinfo, const void *info) {
     if (!wood_can_animate(player,item)) { wood_view.original(drawinfo,info); return; }
     float shadow = 0; patchlib_field_get_value(wood_view.shadow,drawinfo,&shadow);
     if (shadow > 0) { wood_view.original(drawinfo,info); return; }
+    wood_vfx_load();
     int animation = 0, direction = 0, before = 0;
     float rotation = 0, item_scale = 1, arm_rotation = 0;
     Vec2 old_location, old_draw_location, draw_position;
@@ -83,7 +81,6 @@ static void wood_native_draw(void *drawinfo, const void *info) {
         // Hilt at the belt; short blade points diagonally backwards.
         hand = (Vec2){center.x + direction * 5,center.y + 5};
         chosen_rotation = direction * (2.55f + FX_PI * 0.25f); stretch = 0.55f;
-        wood_view.trail_count = 0;
     }
     Vec2 snapshot_hand = {hand.x + draw_offset.x,hand.y + draw_offset.y};
     float drawn_scale = item_scale * stretch;
@@ -105,39 +102,15 @@ static void wood_native_draw(void *drawinfo, const void *info) {
     wood_write_vec(wood_view.location,drawinfo,old_draw_location);
     patchlib_field_set_value(wood_view.arm_rotation,drawinfo,&arm_rotation);
     wood_view.busy = false;
-    int after = 0; void *cache = NULL;
+    int after = 0;
     patchlib_field_get_value(wood_view.count,drawinfo,&after);
     if (after <= before) return;
     if (!wood_view.logged) { wood_view.logged = true; note("Wood held-item draw layer emitted sword; waist/draw override active."); }
-    if (!swinging || !wood.sample_active) return;
-    patchlib_field_get_value(wood_view.cache,drawinfo,&cache);
-    // DrawData is 72 bytes on arm64 / 64 on armv7. Reserve extra stack space for metadata padding.
-    union { max_align_t align; unsigned char bytes[512]; } storage;
-    if (!cache || after < 1 || (size_t)(after-1) >= patchlib_array_length(cache) || !patchlib_array_at(cache,(size_t)(after-1),storage.bytes)) return;
-    WoodDrawData data; memcpy(&data,storage.bytes,sizeof(data));
-    if (!data.texture) return;
-    uint64_t now = now_ms();
-    for (unsigned i = 0; i < wood_view.trail_count; ++i) {
-        if (wood_view.trail[i].stage != wood.combo.stage || now < wood_view.trail[i].at || now - wood_view.trail[i].at > 75) continue;
-        void *entry = wood_view.add(drawinfo,wood_view.madd);
-        if (!entry) break;
-        float strength = (float)(3-i) / 3.0f;
-        Color tint = {(uint8_t)(60*strength),(uint8_t)(30*strength),(uint8_t)(48*strength),(uint8_t)(60*strength)};
-        Vec2 pos = {data.position.x + wood_view.trail[i].world.x - hand.x, data.position.y + wood_view.trail[i].world.y - hand.y};
-        Vec2 scale = {data.scale.x * wood_view.trail[i].stretch / stretch, data.scale.y * wood_view.trail[i].stretch / stretch};
-        wood_view.set(entry,data.texture,pos,tint,wood_view.trail[i].rotation,data.origin,scale,data.effect,0,wood_view.mset);
-    }
-    if (!wood_view.trail_count || wood_view.last_stage != wood.combo.stage || fabsf(wood_view.last_progress - wood.visual_progress) > 0.0001f) {
-        if (wood_view.last_stage != wood.combo.stage) wood_view.trail_count = 0;
-        for (unsigned i = 2; i > 0; --i) wood_view.trail[i] = wood_view.trail[i-1];
-        wood_view.trail[0].world = hand; wood_view.trail[0].rotation = chosen_rotation;
-        wood_view.trail[0].stretch = stretch; wood_view.trail[0].stage = wood.combo.stage; wood_view.trail[0].at = now;
-        if (wood_view.trail_count < 3) ++wood_view.trail_count;
-        wood_view.last_progress = wood.visual_progress; wood_view.last_stage = wood.combo.stage;
-    }
+    if (swinging) wood_vfx_emit(drawinfo,player,draw_offset);
 }
 static void wood_draw_cleanup(void) {
     wood_view.ready = false;
+    wood_vfx_cleanup();
     if (wood_view.address) DobbyDestroy(wood_view.address);
     memset(&wood_view,0,sizeof(wood_view));
 }
@@ -174,5 +147,6 @@ static void wood_draw_init(patch_handle_t main_type, patch_handle_t player, patc
         note("Wood draw override unavailable: native hook failed."); return;
     }
     wood_view.address = address; wood_view.ready = true;
-    note("Wood draw override ready: waist carry, first-hit unsheathing, horizontal projection and up to 3 vanilla-texture afterimages.");
+    wood_vfx_init();
+    note("Wood draw override ready: waist carry, first-hit unsheathing, forward/down/up moves with dedicated PNG slash textures.");
 }
