@@ -7,7 +7,7 @@ import struct
 root = Path(__file__).resolve().parents[1]
 version = json.loads((root / 'Info.json').read_text())['version']
 required = {}
-for abi, elf_class, machine in [('arm64', 2, 183), ('arm', 1, 40)]:
+for abi, elf_class, machine in [('arm64', 2, 183)]:
     name = f'libcombatfx.android.{abi}.so'
     p = root / 'build' / 'package-stage' / name
     data = p.read_bytes()
