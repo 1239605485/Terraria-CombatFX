@@ -21,17 +21,19 @@ typedef struct { uint8_t a, b, g, r; } Color;
 _Static_assert(sizeof(Vec2) == 8, "Vector2 ABI");
 _Static_assert(sizeof(Color) == 4, "Color ABI");
 typedef Vec2 (*GetVec)(const void *);
+typedef Vec2 (*GetCenter)(void *, const void *);
 typedef void (*SetVec)(Vec2, const void *);
 typedef int (*GetInt)(const void *);
 typedef bool (*GetBool)(const void *);
 typedef int (*NewDust)(Vec2, int, int, int, float, float, int, Color, float, const void *);
 static GetVec get_screen;
+static GetCenter get_center;
 static SetVec set_screen;
 static GetInt get_player, get_width, get_height;
 static GetBool get_menu;
 static NewDust new_dust;
-static patch_handle_t m_screen, m_set_screen, m_player, m_width, m_height, m_menu, m_dust;
-static patch_handle_t f_position, f_width, f_height, f_id, f_friendly, f_netmode, f_dust_count;
+static patch_handle_t m_center, m_screen, m_set_screen, m_player, m_width, m_height, m_menu, m_dust;
+static patch_handle_t f_id, f_friendly, f_netmode, f_dust_count;
 static patch_hook_id_t hit_hook = PATCH_HOOK_INVALID_ID, camera_hook = PATCH_HOOK_INVALID_ID;
 static FxBudget budget;
 static bool enabled, busy, first_hit, offset_applied;
@@ -125,13 +127,11 @@ static void hit_postfix(patch_handle_t npc, void **args, void *result, const pat
     bool friendly = false;
     patchlib_field_get_value(f_friendly, npc, &friendly);
     if (friendly) return;
-    Vec2 position = {0}; int w = 0, h = 0, id = -1;
-    patchlib_field_get_value(f_position, npc, &position);
-    patchlib_field_get_value(f_width, npc, &w);
-    patchlib_field_get_value(f_height, npc, &h);
+    int id = -1;
     patchlib_field_get_value(f_id, npc, &id);
-    if (w <= 0 || h <= 0 || w > 4096 || h > 4096 || !isfinite(position.x) || !isfinite(position.y)) return;
-    Vec2 center = {position.x + w * 0.5f, position.y + h * 0.5f};
+    // Avoid field_get_size's struct fall-through bug on 32-bit kernels.
+    Vec2 center = get_center(npc, m_center);
+    if (!isfinite(center.x) || !isfinite(center.y)) return;
     Vec2 screen = get_screen(m_screen);
     int sw = get_width(m_width), sh = get_height(m_height);
     if (sw <= 0 || sh <= 0 || center.x < screen.x - 32 || center.x > screen.x + sw + 32 ||
@@ -176,13 +176,11 @@ static void init_mod(kernel_mod_handle_t *handle) {
     patch_handle_t npc_type = patchlib_type_get_type("Terraria", "NPC");
     patch_handle_t entity = patchlib_type_get_type("Terraria", "Entity");
     patch_handle_t dust = patchlib_type_get_type("Terraria", "Dust");
-    f_position = field(entity, "position", sizeof(Vec2), false);
-    f_width = field(entity, "width", sizeof(int), false);
-    f_height = field(entity, "height", sizeof(int), false);
     f_id = field(entity, "whoAmI", sizeof(int), false);
     f_friendly = field(npc_type, "friendly", sizeof(bool), false);
     f_netmode = field(main_type, "netMode", sizeof(int), true);
     f_dust_count = field(dust, "activeDustCount", sizeof(int), true);
+    m_center = method(entity, "get_Center", true, PATCH_STRUCT, NULL, 0);
     m_screen = method(main_type, "get_screenPosition", false, PATCH_STRUCT, NULL, 0);
     m_player = method(main_type, "get_myPlayer", false, PATCH_INT32, NULL, 0);
     m_menu = method(main_type, "get_gameMenu", false, PATCH_BOOL, NULL, 0);
@@ -193,17 +191,18 @@ static void init_mod(kernel_mod_handle_t *handle) {
     m_dust = method(dust, "NewDust", false, PATCH_INT32, dust_args, 9);
     const patch_type_t hit_args[] = {PATCH_INT32, PATCH_FLOAT, PATCH_INT32, PATCH_BOOL, PATCH_BOOL, PATCH_INT32};
     patch_handle_t strike = method(npc_type, "StrikeNPC", true, PATCH_INT32, hit_args, 6);
-    if (!f_position || !f_width || !f_height || !f_id || !f_friendly || !f_netmode ||
+    if (!m_center || !f_id || !f_friendly || !f_netmode ||
         !m_screen || !m_player || !m_menu || !m_width || !m_height || !m_dust || !strike) {
         note("Disabled: game method signature or field layout mismatch."); return;
     }
+    get_center = (GetCenter)patchlib_method_get_pointer(m_center);
     get_screen = (GetVec)patchlib_method_get_pointer(m_screen);
     get_player = (GetInt)patchlib_method_get_pointer(m_player);
     get_menu = (GetBool)patchlib_method_get_pointer(m_menu);
     get_width = (GetInt)patchlib_method_get_pointer(m_width);
     get_height = (GetInt)patchlib_method_get_pointer(m_height);
     new_dust = (NewDust)patchlib_method_get_pointer(m_dust);
-    if (!get_screen || !get_player || !get_menu || !get_width || !get_height || !new_dust) {
+    if (!get_center || !get_screen || !get_player || !get_menu || !get_width || !get_height || !new_dust) {
         note("Disabled: native method pointer unavailable."); return;
     }
     // Optional camera hook: particle feedback remains usable if camera APIs differ.

@@ -2,6 +2,7 @@
 #include <assert.h>
 #include "../src/combatfx.c"
 static int spawned;
+static Vec2 center_get(void *npc, const void *m) { (void)npc; (void)m; return (Vec2){110, 110}; }
 static bool menu;
 static int mode;
 static Vec2 screen_value;
@@ -18,19 +19,16 @@ static int dust_spawn(Vec2 pos, int w, int h, int type, float x, float y, int al
 }
 static void read_field(patch_handle_t f, patch_handle_t obj, void *out) {
     (void)obj;
-    if (f == f_position) *(Vec2 *)out = (Vec2){100, 100};
-    else if (f == f_width || f == f_height) *(int *)out = 20;
-    else if (f == f_id) *(int *)out = 1;
+    if (f == f_id) *(int *)out = 1;
     else if (f == f_friendly) *(bool *)out = false;
     else if (f == f_netmode) *(int *)out = mode;
 }
 int main(void) {
     // Missing injected APIs must disable the mod without dereferencing null slots.
     init_mod(NULL); assert(!enabled); cleanup_mod(NULL);
-    f_position = (void *)1; f_width = (void *)2; f_height = (void *)3;
     f_id = (void *)4; f_friendly = (void *)5; f_netmode = (void *)6;
     patchlib_field_get_value = read_field;
-    get_player = local_player; get_width = width; get_height = height;
+    get_center = center_get; get_player = local_player; get_width = width; get_height = height;
     get_menu = in_menu; get_screen = screen_get; set_screen = screen_set;
     new_dust = dust_spawn; enabled = true;
     int damage = 10, direction = 1, owner = 1, result = 10;
