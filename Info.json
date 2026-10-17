@@ -2,9 +2,9 @@
   "pkgId": "liuxin.combatfx",
   "name": "武器打击反馈·三式刀光测试",
   "author": "liuxin",
-  "description": "木剑三段动作与刀光测试；刀光继承原版物品环境光照，修正暖色外沿透明混合。仅 ARM64。",
-  "version": "0.4.7",
-  "versionCode": 11,
+  "description": "木剑三段动作与受控自发光刀光测试；暗处可见，环境光下跟随场景色。仅 ARM64。",
+  "version": "0.5.0",
+  "versionCode": 12,
   "dependence": [],
   "support": {
     "android": {

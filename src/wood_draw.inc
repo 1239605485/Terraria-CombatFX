@@ -20,6 +20,8 @@ static struct {
     WoodAddDraw add;
     WoodSetDraw set;
     patch_handle_t madd, mset, item_color;
+    WoodDrawData sword_draw;
+    bool sword_draw_valid;
     patch_handle_t player, position, location, arm_rotation, shadow, cache, count, item_scale, player_width, player_height;
 } wood_view;
 #include "vfx_runtime.inc"
@@ -47,6 +49,7 @@ static patch_handle_t wood_overload(patch_handle_t type, const char *name, const
     return found;
 }
 static void wood_native_draw(void *drawinfo, const void *info) {
+    wood_view.sword_draw_valid=false;
     if (!wood_view.ready || wood_view.busy || !drawinfo) { wood_view.original(drawinfo,info); return; }
     void *player = NULL;
     patchlib_field_get_value(wood_view.player,drawinfo,&player);
@@ -95,6 +98,18 @@ static void wood_native_draw(void *drawinfo, const void *info) {
     wood_write_vec(wood_view.location,drawinfo,snapshot_hand);
     if (swinging) patchlib_field_set_value(wood_view.arm_rotation,drawinfo,&wood.arm_rotation);
     wood_view.original(drawinfo,info);
+    int after_draw=0;
+    patchlib_field_get_value(wood_view.count,drawinfo,&after_draw);
+    void *cache=NULL;
+    if (after_draw>before) patchlib_field_get_value(wood_view.cache,drawinfo,&cache);
+    WoodDrawData captured={0};
+    if (cache && (size_t)after_draw<=patchlib_array_length(cache) &&
+        patchlib_array_at(cache,(size_t)(after_draw-1),&captured) && captured.texture &&
+        isfinite(captured.position.x) && isfinite(captured.position.y) &&
+        isfinite(captured.rotation) && isfinite(captured.scale.x) && isfinite(captured.scale.y)) {
+        wood_view.sword_draw=captured;
+        wood_view.sword_draw_valid=true;
+    }
     patchlib_field_set_value(wood.animation,player,&animation);
     patchlib_field_set_value(wood.rotation,player,&rotation);
     patchlib_field_set_value(wood_view.item_scale,item,&item_scale);
@@ -102,9 +117,7 @@ static void wood_native_draw(void *drawinfo, const void *info) {
     wood_write_vec(wood_view.location,drawinfo,old_draw_location);
     patchlib_field_set_value(wood_view.arm_rotation,drawinfo,&arm_rotation);
     wood_view.busy = false;
-    int after = 0;
-    patchlib_field_get_value(wood_view.count,drawinfo,&after);
-    if (after <= before) return;
+    if (after_draw <= before) return;
     if (!wood_view.logged) { wood_view.logged = true; note("Wood held-item draw layer emitted sword; waist/draw override active."); }
 }
 // Render the slash after the game's arm-over-item layers. Layer 27 is followed

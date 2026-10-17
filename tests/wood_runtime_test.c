@@ -84,6 +84,7 @@ static void original_draw(void *draw, const void *m) {
     (void)m; assert(draw == &draw_object && (animation > 0 || inventory_is_open));
     WoodDrawData *data = add_draw(draw,NULL);
     set_draw(data,&item_object,draw_location,(Color){255,255,255,255},item_rotation,(Vec2){0,32},(Vec2){live_scale,live_scale},0,0,NULL);
+    data->source=(FxRect){0,0,20,40};
 }
 static int effect_original_called;
 static void effect_layer_original(void *draw, const void *m) {
@@ -184,6 +185,7 @@ int main(void) {
     assert(animation == 11 && live_scale == 1 && cache_count == 1);
     animation = 10; cache_count = 0; wood_native_draw(&draw_object,NULL);
     assert(animation == 10 && live_scale == 1 && cache_count == 1);
+    assert(wood_view.sword_draw_valid && wood_view.sword_draw.texture==&item_object);
 
     animation = 21; assert(wood_pose(&player_object,&item_object)); assert(wood.combo.stage == 1);
     animation = 11; assert(wood_pose(&player_object,&item_object));
@@ -196,6 +198,7 @@ int main(void) {
         slash.sprites[i].root.value=(uintptr_t)fake(100+i);
         slash.sprites[i].width=256; slash.sprites[i].height=128;
     }
+    wood_view.sword_draw_valid=false;
     for(unsigned stage=0;stage<3;stage++) for(int dir=-1;dir<=1;dir+=2) {
         facing=dir; wood.combo.stage=stage; wood.combo.running=true;
         wood.sample_active=true; wood.visual_progress=0.4f;
@@ -211,6 +214,16 @@ int main(void) {
         assert(fabsf(cache_data[1].rotation-(expected+FX_PI*0.5f))<1e-5f);
         assert(fabsf(cache_data[1].position.x-(wood.visual_hand.x+cosf(expected)*wood.length*wood.visual_stretch*0.48f))<1e-4f);
     }
+    // When the real held-item draw snapshot exists, the slash center follows
+    // its exact origin, scale, rotation, and screen-space position.
+    wood_view.sword_draw_valid=true;
+    wood_view.sword_draw=(WoodDrawData){.texture=&item_object,.position={47,63},.source={0,0,24,40},
+        .rotation=0.35f,.origin={3,17},.scale={0.8f,0.7f},.effect=1};
+    cache_count=0; wood_vfx_emit(&draw_object,&player_object,(Vec2){0,0});
+    float ddx=-(12-3)*0.8f, ddy=(20-17)*0.7f;
+    assert(fabsf(cache_data[1].position.x-(47+cosf(0.35f)*ddx-sinf(0.35f)*ddy))<1e-4f);
+    assert(fabsf(cache_data[1].position.y-(63+sinf(0.35f)*ddx+cosf(0.35f)*ddy))<1e-4f);
+    wood_view.sword_draw_valid=false;
     // Camera movement converts the world-space hand once; the held-item draw offset must not be added again.
     screen_value=(Vec2){320,180}; cache_count=0;
     wood_vfx_emit(&draw_object,&player_object,(Vec2){-320,-180});
@@ -222,16 +235,21 @@ int main(void) {
     cache_count=0; effect_original_called=0;
     wood_native_effect_draw(&draw_object,NULL);
     assert(effect_original_called==1 && cache_count==3);
-    // Non-emissive wooden-sword trails disappear in darkness, inherit torch
-    // hue and use premultiplied RGB on every layer (no bright orange halo).
+    // Sword trails retain controlled emission in darkness, follow torch hue,
+    // and use premultiplied RGB on every layer (no bright orange halo).
     item_light=(Color){255,0,0,0}; cache_count=0;
-    wood_native_effect_draw(&draw_object,NULL); assert(cache_count==0);
+    wood_native_effect_draw(&draw_object,NULL); assert(cache_count==3);
+    for(int layer=0;layer<3;layer++) {
+        Color c=cache_data[layer].color;
+        assert(c.a>0 && c.r<=c.a && c.g<=c.a && c.b<=c.a);
+    }
+    assert(cache_data[1].color.a>70);
     item_light=(Color){255,30,70,120}; cache_count=0;
     wood_native_effect_draw(&draw_object,NULL); assert(cache_count==3);
     for(int layer=0;layer<3;layer++) {
         Color c=cache_data[layer].color;
         assert(c.r<=c.a && c.g<=c.a && c.b<=c.a);
-        assert(c.r>c.g && c.g>c.b && c.a<80);
+        assert(c.r>c.g && c.g>c.b && c.a<(layer==1 ? 140 : 80));
     }
     item_light=(Color){255,255,255,255}; cache_count=0;
     wood_native_effect_draw(&draw_object,NULL);
