@@ -1,15 +1,15 @@
 {
   "pkgId": "liuxin.combatfx",
-  "name": "武器打击反馈·三式刀光测试",
+  "name": "武器打击反馈·模块化木剑测试",
   "author": "liuxin",
-  "description": "制作闪退排查版：背包/制作界面打开时绕过全部木剑动作修改；延长拔剑动作并扩大前方横砍幅度。保留三式PNG刀光，闪退根因仍待实机验证。",
-  "version": "0.4.1",
-  "versionCode": 5,
+  "description": "以 0.4.1 为行为基准的模块拆分版本：木剑动作、绘制与 PNG 刀光编译为独立武器模块；仅构建 ARM64。",
+  "version": "0.4.2",
+  "versionCode": 6,
   "dependence": [],
   "support": {
     "android": {
       "arm64": true,
-      "arm": true
+      "arm": false
     }
   }
 }

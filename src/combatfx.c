@@ -13,31 +13,22 @@
 #include "mod_logger.h"
 #include "effect_budget.h"
 #include "combo_math.h"
+#include "combatfx_internal.h"
 #include "patchlib/struct/array.h"
 #include "terraria/texture2d.h"
 #include "vfx_image.h"
 
 // API slots are populated by TEFKernel's shared plugin registration.
 void (*mod_logger_write)(mod_log_level_t, const char *, const char *, ...) = NULL;
-typedef FxPoint Vec2;
-// This mobile build's XNA Color layout is A,B,G,R, not desktop PackedValue.
-typedef struct { uint8_t a, b, g, r; } Color;
-_Static_assert(sizeof(Vec2) == 8, "Vector2 ABI");
-_Static_assert(sizeof(Color) == 4, "Color ABI");
-typedef Vec2 (*GetVec)(const void *);
-typedef Vec2 (*GetCenter)(void *, const void *);
-typedef void (*SetVec)(Vec2, const void *);
-typedef int (*GetInt)(const void *);
-typedef bool (*GetBool)(const void *);
-typedef int (*NewDust)(Vec2, int, int, int, float, float, int, Color, float, const void *);
-static GetVec get_screen;
-static GetCenter get_center;
-static SetVec set_screen;
-static GetInt get_player, get_width, get_height;
-static GetBool get_menu;
-static NewDust new_dust;
-static patch_handle_t m_center, m_screen, m_set_screen, m_player, m_width, m_height, m_menu, m_dust;
-static patch_handle_t f_id, f_friendly, f_netmode, f_dust_count;
+// Shared ABI types are declared in combatfx_internal.h.
+GetVec get_screen;
+GetCenter get_center;
+SetVec set_screen;
+GetInt get_player, get_width, get_height;
+GetBool get_menu;
+NewDust new_dust;
+patch_handle_t m_center, m_screen, m_set_screen, m_player, m_width, m_height, m_menu, m_dust;
+patch_handle_t f_id, f_friendly, f_netmode, f_dust_count;
 static patch_hook_id_t hit_hook = PATCH_HOOK_INVALID_ID, camera_hook = PATCH_HOOK_INVALID_ID;
 static FxBudget budget;
 static bool enabled, busy, first_hit, offset_applied;
@@ -46,14 +37,14 @@ static uint64_t shake_until, shake_start;
 static float shake_strength;
 static uint32_t random_state = 0x7b913d45u;
 static FILE *runtime_log;
-static char mod_resource_dir[1024];
+char mod_resource_dir[1024];
 
-static uint64_t now_ms(void) {
+uint64_t now_ms(void) {
     struct timespec t;
     if (clock_gettime(CLOCK_MONOTONIC, &t) != 0) return 0;
     return (uint64_t)t.tv_sec * 1000 + (uint64_t)t.tv_nsec / 1000000;
 }
-static void note(const char *message) {
+void note(const char *message) {
     if (mod_logger_write) mod_logger_write(MOD_LOG_LEVEL_INFO, "CombatFX", "%s", message);
     if (runtime_log) { fprintf(runtime_log, "%s\n", message); fflush(runtime_log); }
 }
@@ -76,26 +67,24 @@ static bool match(patch_handle_t method, bool instance, patch_type_t result,
     patchlib_method_signature_free(&s);
     return ok;
 }
-static patch_handle_t method(patch_handle_t type, const char *name, bool instance,
+patch_handle_t method(patch_handle_t type, const char *name, bool instance,
                               patch_type_t result, const patch_type_t *args, size_t count) {
     if (!type) return NULL;
     patch_handle_t m = patchlib_type_get_method_by_param_count(type, name, (int)count);
     return match(m, instance, result, args, count) ? m : NULL;
 }
-static patch_handle_t field(patch_handle_t type, const char *name, size_t size, bool is_static) {
+patch_handle_t field(patch_handle_t type, const char *name, size_t size, bool is_static) {
     if (!type) return NULL;
     patch_handle_t f = patchlib_type_get_field(type, name);
     if (!f || patchlib_field_get_size(f) != size || patchlib_field_is_static(f) != is_static) return NULL;
     return f;
 }
-static bool playing(void) {
+bool playing(void) {
     if (get_menu(m_menu)) return false;
     int mode = 2;
     patchlib_field_get_value(f_netmode, NULL, &mode);
     return mode != 2;
 }
-#include "wood_combo.inc"
-#include "wood_draw.inc"
 
 static void restore_camera(void) {
     if (!offset_applied || !get_screen || !set_screen) return;

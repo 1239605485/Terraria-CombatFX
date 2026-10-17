@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 #include <assert.h>
 #include "../src/combatfx.c"
+#include "../src/weapon_wood_sword.c"
 static bool inventory_is_open;
 static bool inventory_state(const void *m) { (void)m; return inventory_is_open; }
 static int player_object, other_object, item_object, npc_object, array_object;
