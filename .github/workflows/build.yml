@@ -1,0 +1,72 @@
+name: Build Android CombatFX
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test limits and runtime guards
+        run: |
+          cmake -S . -B build/tests -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/tests --parallel 2
+          ctest --test-dir build/tests --output-on-failure
+  build:
+    needs: tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {abi: arm64-v8a, arch: arm64}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: 1239605485/TEFKernel
+          ref: 5807da2797e3aa3ff4692b8eb6a557cd2a7a50c6
+          path: build/deps/TEFKernel
+          sparse-checkout: libs/dobby
+      - name: Set up Android NDK
+        id: ndk
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r28
+      - name: Build native library
+        env:
+          NDK_ROOT: ${{ steps.ndk.outputs.ndk-path }}
+        run: |
+          cmake -S . -B build/android -DCMAKE_TOOLCHAIN_FILE="$NDK_ROOT/build/cmake/android.toolchain.cmake" -DANDROID_ABI=${{ matrix.abi }} -DANDROID_PLATFORM=android-23 -DANDROID_STL=c++_static -DCMAKE_BUILD_TYPE=Release -DCOMBATFX_DOBBY_SOURCE_DIR="$GITHUB_WORKSPACE/build/deps/TEFKernel/libs/dobby"
+          cmake --build build/android --target combatfx --parallel 2
+          mkdir -p dist
+          cp build/android/libcombatfx.so dist/libcombatfx.android.${{ matrix.arch }}.so
+          "$NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" --dyn-syms dist/*.so | tee build/symbols.txt
+          grep -q 'create_kernel_mod' build/symbols.txt
+          grep -q 'patchlib_install_prepost_hook' build/symbols.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.arch }}
+          path: dist/*.so
+          if-no-files-found: error
+  package:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-*
+          path: build/package-stage
+          merge-multiple: true
+      - name: Package and verify install ZIP
+        run: python3 tools/package.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CombatFX-Android-install
+          path: dist/CombatFX-*-Android.zip
+          if-no-files-found: error
