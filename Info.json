@@ -2,9 +2,9 @@
   "pkgId": "liuxin.combatfx",
   "name": "武器打击反馈·三式刀光测试",
   "author": "liuxin",
-  "description": "木剑三段攻击采用缓起手、快速挥击、缓收招；刀光跟随剑刃并正确处理镜头偏移。沿用原版木剑音色，三招仅轻微变调。保留制作界面隔离。",
-  "version": "0.4.4",
-  "versionCode": 8,
+  "description": "木剑三段攻击采用缓起手、快速挥击、缓收招；刀光以暖色外沿、主刀光和亮芯三层叠绘，并正确跟随镜头。沿用原版木剑音色，保留制作界面隔离。",
+  "version": "0.4.5",
+  "versionCode": 9,
   "dependence": [],
   "support": {
     "android": {
