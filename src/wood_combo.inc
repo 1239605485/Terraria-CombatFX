@@ -13,6 +13,10 @@ typedef float (*WoodScale)(void *, void *, const void *);
 typedef FxRect (*WoodHitbox)(void *, const void *);
 static struct {
     bool ready, sample_active, logged;
+    unsigned sequence_logs;
+    int observed_animation;
+    float visual_rotation, visual_stretch, visual_progress, arm_rotation;
+    Vec2 visual_hand;
     FxCombo combo;
     FxBlade blades[FX_SWEEP_SAMPLES];
     float length, padding;
@@ -56,26 +60,56 @@ static bool wood_can_animate(patch_handle_t player, patch_handle_t item) {
     patchlib_field_get_value(wood.frozen, player, &frozen);
     return gravity > 0 && !dead && !frozen;
 }
+static void wood_draw_init(patch_handle_t main_type, patch_handle_t player, patch_handle_t entity);
+static void wood_draw_cleanup(void);
+static void wood_start(int slot, const char *reason) {
+    fx_combo_begin(&wood.combo, slot, now_ms());
+    wood.observed_animation = -1;
+    if (wood.sequence_logs < 9) {
+        char line[140];
+        snprintf(line,sizeof(line),"Wood combo stage=%u slot=%d trigger=%s",wood.combo.stage+1,slot,reason);
+        note(line); ++wood.sequence_logs;
+    }
+}
 static bool wood_pose(patch_handle_t player, patch_handle_t item) {
     wood.sample_active = false;
-    if (!wood_can_animate(player, item) || !wood.combo.running) return false;
-    if (wood.slot(player, wood.ms) != wood.combo.slot) { fx_combo_reset(&wood.combo); return false; }
+    if (!wood_can_animate(player, item)) return false;
     int animation = 0, maximum = 0, direction = 0;
     patchlib_field_get_value(wood.animation, player, &animation);
     patchlib_field_get_value(wood.maximum, player, &maximum);
     patchlib_field_get_value(wood.direction, player, &direction);
     if (animation <= 0 || maximum <= 1 || maximum > 3600 || (direction != -1 && direction != 1)) return false;
+    int slot = wood.slot(player, wood.ms);
+    if (wood.combo.valid && wood.combo.slot != slot) fx_combo_reset(&wood.combo);
+    if (!wood.combo.running || (wood.observed_animation >= 0 && animation > wood.observed_animation + 1))
+        wood_start(slot, "animation-transition");
+    wood.observed_animation = animation;
     float progress = fx_swing_progress(animation, maximum);
     float scale = wood.scale(player, item, wood.mscale);
     if (!isfinite(scale) || scale <= 0 || scale > 4) return false;
     float local_angle = fx_swing_angle(wood.combo.stage, progress);
-    float world_angle = fx_world_angle(local_angle, direction);
+    float pose_angle = fx_project_angle(wood.combo.stage, local_angle);
+    if (wood.combo.stage == 0 && progress < 0.16f)
+        pose_angle = 2.55f + (pose_angle - 2.55f) * fx_draw_lift(progress);
+    float world_angle = fx_world_angle(pose_angle, direction);
     float arm_angle = world_angle - FX_PI * 0.5f;
     // Full is enum value 0 in this mobile version.
     wood.arm(player, true, 0, arm_angle, wood.ma);
     Vec2 hand = wood.hand(player, 0, arm_angle, wood.mhand);
     if (!isfinite(hand.x) || !isfinite(hand.y) || fabsf(hand.x) > 1e8f || fabsf(hand.y) > 1e8f) return false;
-    float rotation = direction * (local_angle + FX_PI * 0.25f);
+    if (wood.combo.stage == 0 && progress < 0.16f) {
+        Vec2 center = get_center(player, m_center);
+        float lift = fx_draw_lift(progress);
+        Vec2 hip = {center.x + direction * 5, center.y + 5};
+        hand.x = hip.x + (hand.x - hip.x) * lift;
+        hand.y = hip.y + (hand.y - hip.y) * lift;
+    }
+    float rotation = direction * (pose_angle + FX_PI * 0.25f);
+    wood.visual_hand = hand; wood.visual_rotation = rotation; wood.visual_progress = progress;
+    wood.arm_rotation = arm_angle;
+    wood.visual_stretch = fx_project_length(wood.combo.stage,local_angle);
+    if (wood.combo.stage == 0 && progress < 0.16f)
+        wood.visual_stretch = 0.55f + (wood.visual_stretch - 0.55f) * fx_draw_lift(progress);
     void *location = patchlib_field_get_pointer(wood.location, player);
     if (!location) return false;
     // The supplied kernel reports sizeof(void*) for value-type fields on arm32.
@@ -85,11 +119,13 @@ static bool wood_pose(patch_handle_t player, patch_handle_t item) {
     float previous = fmaxf(0.16f, progress - 1.0f / (float)(maximum - 1));
     for (unsigned i = 0; i < FX_SWEEP_SAMPLES; ++i) {
         float t = previous + (progress - previous) * (float)i / (FX_SWEEP_SAMPLES - 1);
-        float angle = fx_world_angle(fx_swing_angle(wood.combo.stage, t), direction);
+        float a = fx_swing_angle(wood.combo.stage, t);
+        float angle = fx_world_angle(fx_project_angle(wood.combo.stage,a), direction);
+        float reach = wood.length * scale * fx_project_length(wood.combo.stage,a);
         Vec2 h = wood.hand(player, 0, angle - FX_PI * 0.5f, wood.mhand);
         if (!isfinite(h.x) || !isfinite(h.y) || fabsf(h.x) > 1e8f || fabsf(h.y) > 1e8f) return false;
         wood.blades[i].hand = h;
-        wood.blades[i].tip = (Vec2){h.x + cosf(angle) * wood.length * scale, h.y + sinf(angle) * wood.length * scale};
+        wood.blades[i].tip = (Vec2){h.x + cosf(angle) * reach, h.y + sinf(angle) * reach};
     }
     wood.sample_active = fx_swing_active(progress);
     return true;
@@ -100,7 +136,7 @@ static void wood_begin(patch_handle_t player, void **args, void *result, const p
     patch_handle_t item = *(void **)args[0];
     if (!wood_local(player)) return;
     if (!wood_can_animate(player, item)) { fx_combo_reset(&wood.combo); return; }
-    fx_combo_begin(&wood.combo, wood.slot(player, wood.ms), now_ms());
+    wood_start(wood.slot(player, wood.ms), "actual-use");
     wood.length = 36;
     if (!wood.logged) { wood.logged = true; note("Wooden sword combo started: forward / reverse / overhead; single-player only."); }
 }
@@ -169,7 +205,7 @@ static void wood_watch(patch_handle_t player, void **args, void *result, const p
         fx_combo_reset(&wood.combo); wood.sample_active = false; return;
     }
     int animation = 0; patchlib_field_get_value(wood.animation, player, &animation);
-    if (animation <= 0) { fx_combo_idle(&wood.combo, now_ms()); wood.sample_active = false; }
+    if (animation <= 0) { fx_combo_idle(&wood.combo, now_ms()); wood.sample_active = false; wood.observed_animation = 0; }
 }
 static void wood_frame(patch_handle_t player, void **args, void *result, const patch_method_signature_t *sig) {
     (void)args; (void)result; (void)sig;
@@ -201,6 +237,7 @@ static void wood_native_frame(void *player, const void *info) {
     wood.original_frame(player, info); wood_frame(player, NULL, NULL, NULL);
 }
 static void wood_cleanup(void) {
+    wood_draw_cleanup();
     wood.ready = false;
     for (unsigned i = wood.hook_count; i > 0; --i) DobbyDestroy(wood.addresses[i-1]);
     memset(&wood, 0, sizeof(wood)); fx_combo_reset(&wood.combo);
@@ -273,5 +310,7 @@ static void wood_init(patch_handle_t main_type, patch_handle_t entity) {
         ++wood.hook_count;
     }
     wood.ready = true;
+    wood.observed_animation = -1;
+    wood_draw_init(main_type, player, entity);
     note("Wood combo ready: item 24, 3 stages, 800ms idle reset, one successful hit per NPC per swing. Charge deferred.");
 }

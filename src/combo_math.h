@@ -46,12 +46,24 @@ static inline float fx_swing_progress(int remaining, int maximum) {
 }
 static inline bool fx_swing_active(float p) { return p >= 0.16f && p <= 0.82f; }
 static inline float fx_swing_angle(unsigned stage, float p) {
-    static const float begin[] = {-1.10f, 0.65f, -1.90f};
-    static const float end[] = {0.65f, -1.10f, 1.00f};
+    static const float begin[] = {2.55f, -0.40f, -1.90f};
+    static const float end[] = {-0.40f, 2.55f, 1.00f};
     stage %= 3;
     float q = fx_clamp((p - 0.16f) / 0.66f, 0, 1);
     q = q * q * (3 - 2 * q);
     return begin[stage] + (end[stage] - begin[stage]) * q;
+}
+// Side-view projection distinguishes horizontal sweeps from an overhead chop.
+static inline float fx_project_angle(unsigned stage, float angle) {
+    return stage % 3 == 2 ? angle : atan2f(sinf(angle) * 0.22f, cosf(angle));
+}
+static inline float fx_project_length(unsigned stage, float angle) {
+    if (stage % 3 == 2) return 1;
+    float c = cosf(angle), s = sinf(angle) * 0.22f;
+    return sqrtf(c*c + s*s);
+}
+static inline float fx_draw_lift(float p) {
+    float q = fx_clamp(p / 0.16f, 0, 1); return q*q*(3-2*q);
 }
 static inline float fx_world_angle(float local_angle, int direction) { return direction > 0 ? local_angle : FX_PI - local_angle; }
 // Clip the blade segment against an expanded NPC rectangle (slab intersection).
