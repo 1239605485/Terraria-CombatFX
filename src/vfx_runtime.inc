@@ -47,6 +47,7 @@ static void wood_vfx_load(void) {
 }
 
 static void wood_vfx_emit(void *drawinfo, void *player, Vec2 draw_offset) {
+    (void)draw_offset; // PlayerDrawSet's screen-space offset is already represented by Main.screenPosition.
     if (!slash.ready || !wood.sample_active || !wood.combo.running) return;
     wood_vfx_load();
     unsigned stage = wood.combo.stage % 3;
@@ -65,8 +66,10 @@ static void wood_vfx_emit(void *drawinfo, void *player, Vec2 draw_offset) {
     float blade_angle=fx_world_angle(pose.angle,direction);
     float slash_angle=blade_angle+FX_PI*0.5f;
     float length=wood.length*item_scale*wood.visual_stretch;
-    Vec2 position={wood.visual_hand.x+cosf(blade_angle)*length*0.48f-screen.x+draw_offset.x,
-                   wood.visual_hand.y+sinf(blade_angle)*length*0.48f-screen.y+draw_offset.y};
+    // visual_hand and blade reach are world coordinates. Convert to screen space exactly once;
+    // adding draw_offset here applied the camera displacement a second time and sent the slash away.
+    Vec2 position={wood.visual_hand.x+cosf(blade_angle)*length*0.48f-screen.x,
+                   wood.visual_hand.y+sinf(blade_angle)*length*0.48f-screen.y};
     Vec2 origin={32,23.5f};
     Vec2 scale={length*0.92f/64,length*(stage==0 ? 0.34f : 0.55f)/47};
     uint8_t value = (uint8_t)(255*opacity);
