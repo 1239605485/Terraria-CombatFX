@@ -1,10 +1,10 @@
 {
   "pkgId": "liuxin.combatfx",
-  "name": "武器打击反馈·模块化木剑测试",
+  "name": "武器打击反馈·四类武器动作测试",
   "author": "liuxin",
-  "description": "以 0.4.1 为行为基准的模块拆分版本：木剑动作、绘制与 PNG 刀光编译为独立武器模块；仅构建 ARM64。",
-  "version": "0.4.2",
-  "versionCode": 6,
+  "description": "木剑连击、铁阔剑重砍、铜短剑快刺、长矛突刺；三层强光刀痕。仅 ARM64。",
+  "version": "0.4.3",
+  "versionCode": 7,
   "dependence": [],
   "support": {
     "android": {

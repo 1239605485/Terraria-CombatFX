@@ -1,6 +1,7 @@
 // Included after the base helpers; no retained game objects.
 #include "dobby.h"
 #include "combatfx_internal.h"
+#include "weapon_profiles.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -24,6 +25,7 @@ static struct {
     FxCombo combo;
     FxBlade blades[FX_SWEEP_SAMPLES];
     float length, padding;
+    const FxWeaponProfile *profile;
     GetBool inventory_open;
     patch_handle_t minventory;
     bool ui_logged;
@@ -57,7 +59,42 @@ static bool wood_local(patch_handle_t player) {
 static bool wood_item(patch_handle_t item) {
     int type = -1;
     if (item) patchlib_field_get_value(wood.type, item, &type);
-    return type == FX_WOODEN_SWORD;
+    const FxWeaponProfile *next = fx_weapon_profile_find(type);
+    if (next != wood.profile) {
+        wood.profile = next;
+        fx_combo_reset(&wood.combo);
+        wood.sample_active = false;
+    }
+    return next != NULL;
+}
+static bool wood_style(void) {
+    return wood.profile && wood.profile->style == FX_STYLE_WOOD_COMBO;
+}
+static float weapon_local_angle(unsigned stage, float progress) {
+    if (!wood.profile || wood.profile->style == FX_STYLE_WOOD_COMBO) return fx_swing_angle(stage, progress);
+    static const float heavy_from[3]={-1.42f,-1.52f,1.52f}, heavy_to[3]={1.42f,1.52f,-1.52f};
+    static const float short_from[3]={-0.16f,0.10f,0.06f}, short_to[3]={0.12f,-0.10f,-0.06f};
+    static const float spear_from[3]={0.06f,-0.08f,0.10f}, spear_to[3]={-0.04f,0.08f,-0.08f};
+    stage%=3;
+    float q=fx_swing_fraction(stage,progress); q=q*q*(3.0f-2.0f*q);
+    const float *from=heavy_from,*to=heavy_to;
+    if(wood.profile->style==FX_STYLE_SHORT_THRUST){from=short_from;to=short_to;}
+    if(wood.profile->style==FX_STYLE_SPEAR_THRUST){from=spear_from;to=spear_to;}
+    return from[stage]+(to[stage]-from[stage])*q;
+}
+static float weapon_project_angle(unsigned stage,float angle) {
+    if (!wood.profile || wood.profile->style==FX_STYLE_WOOD_COMBO || wood.profile->style==FX_STYLE_HEAVY_SLASH)
+        return fx_project_angle(stage,angle);
+    return angle;
+}
+static float weapon_reach(unsigned stage,float angle) {
+    float projection=(!wood.profile || wood.profile->style==FX_STYLE_WOOD_COMBO || wood.profile->style==FX_STYLE_HEAVY_SLASH)
+        ? fx_project_length(stage,angle) : 1.0f;
+    return projection*(wood.profile ? wood.profile->reach_scale : 1.0f);
+}
+static float weapon_lunge(float progress) {
+    if (!wood.profile || wood.profile->lunge<=0) return 0;
+    return wood.profile->lunge*sinf(fx_swing_fraction(wood.combo.stage,progress)*FX_PI);
 }
 static bool wood_can_animate(patch_handle_t player, patch_handle_t item) {
     if (!wood_local(player) || !wood_item(item)) return false;
@@ -80,7 +117,7 @@ static void wood_start(int slot, const char *reason) {
     wood.observed_animation = -1;
     if (wood.sequence_logs < 9) {
         char line[140];
-        snprintf(line,sizeof(line),"Wood combo stage=%u slot=%d trigger=%s",wood.combo.stage+1,slot,reason);
+        snprintf(line,sizeof(line),"%s combo stage=%u slot=%d trigger=%s",wood.profile ? wood.profile->name : "Weapon",wood.combo.stage+1,slot,reason);
         note(line); ++wood.sequence_logs;
     }
 }
@@ -100,9 +137,9 @@ static bool wood_pose(patch_handle_t player, patch_handle_t item) {
     float progress = fx_swing_progress(animation, maximum);
     float scale = wood.scale(player, item, wood.mscale);
     if (!isfinite(scale) || scale <= 0 || scale > 4) return false;
-    float local_angle = fx_swing_angle(wood.combo.stage, progress);
-    float pose_angle = fx_project_angle(wood.combo.stage, local_angle);
-    if (wood.combo.stage == 0 && progress < 0.26f)
+    float local_angle = weapon_local_angle(wood.combo.stage, progress);
+    float pose_angle = weapon_project_angle(wood.combo.stage, local_angle);
+    if (wood_style() && wood.combo.stage == 0 && progress < 0.26f)
         pose_angle = 2.55f + (pose_angle - 2.55f) * fx_draw_lift(progress);
     float world_angle = fx_world_angle(pose_angle, direction);
     float arm_angle = world_angle - FX_PI * 0.5f;
@@ -110,39 +147,41 @@ static bool wood_pose(patch_handle_t player, patch_handle_t item) {
     wood.arm(player, true, 0, arm_angle, wood.ma);
     Vec2 hand = wood.hand(player, 0, arm_angle, wood.mhand);
     if (!isfinite(hand.x) || !isfinite(hand.y) || fabsf(hand.x) > 1e8f || fabsf(hand.y) > 1e8f) return false;
-    if (wood.combo.stage == 0 && progress < 0.26f) {
+    if (wood_style() && wood.combo.stage == 0 && progress < 0.26f) {
         Vec2 center = get_center(player, m_center);
         float lift = fx_draw_lift(progress);
         Vec2 hip = {center.x + direction * 5, center.y + 5};
         hand.x = hip.x + (hand.x - hip.x) * lift;
         hand.y = hip.y + (hand.y - hip.y) * lift;
     }
-    if (wood.combo.stage == 0) hand.x += direction*8*fx_swing_fraction(0,progress);
+    if (wood_style() && wood.combo.stage == 0) hand.x += direction*8*fx_swing_fraction(0,progress);
+    hand.x += direction*weapon_lunge(progress);
     float rotation = direction * (pose_angle + FX_PI * 0.25f);
     wood.visual_hand = hand; wood.visual_rotation = rotation; wood.visual_progress = progress;
     wood.arm_rotation = arm_angle;
-    wood.visual_stretch = fx_project_length(wood.combo.stage,local_angle);
-    if (wood.combo.stage == 0 && progress < 0.26f)
+    wood.visual_stretch = weapon_reach(wood.combo.stage,local_angle);
+    if (wood_style() && wood.combo.stage == 0 && progress < 0.26f)
         wood.visual_stretch = 0.55f + (wood.visual_stretch - 0.55f) * fx_draw_lift(progress);
     void *location = patchlib_field_get_pointer(wood.location, player);
     if (!location) return false;
     // The supplied kernel reports sizeof(void*) for value-type fields on arm32.
     memcpy(location, &hand, sizeof(hand));
     patchlib_field_set_value(wood.rotation, player, &rotation);
-    wood.padding = 3.0f * scale;
+    wood.padding = (wood.profile ? wood.profile->hit_padding : 3.0f) * scale;
     float previous = fmaxf(0.16f, progress - 1.0f / (float)(maximum - 1));
     for (unsigned i = 0; i < FX_SWEEP_SAMPLES; ++i) {
         float t = previous + (progress - previous) * (float)i / (FX_SWEEP_SAMPLES - 1);
-        float a = fx_swing_angle(wood.combo.stage, t);
-        float angle = fx_world_angle(fx_project_angle(wood.combo.stage,a), direction);
-        float reach = wood.length * scale * fx_project_length(wood.combo.stage,a);
+        float a = weapon_local_angle(wood.combo.stage, t);
+        float angle = fx_world_angle(weapon_project_angle(wood.combo.stage,a), direction);
+        float reach = wood.length * scale * weapon_reach(wood.combo.stage,a);
         Vec2 h = wood.hand(player, 0, angle - FX_PI * 0.5f, wood.mhand);
         if (!isfinite(h.x) || !isfinite(h.y) || fabsf(h.x) > 1e8f || fabsf(h.y) > 1e8f) return false;
-        if (wood.combo.stage == 0) h.x += direction*8*fx_swing_fraction(0,t);
+        if (wood_style() && wood.combo.stage == 0) h.x += direction*8*fx_swing_fraction(0,t);
+        h.x += direction*weapon_lunge(t);
         wood.blades[i].hand = h;
         wood.blades[i].tip = (Vec2){h.x + cosf(angle) * reach, h.y + sinf(angle) * reach};
     }
-    wood.sample_active = fx_swing_active(progress) && (wood.combo.stage != 0 || progress >= 0.26f);
+    wood.sample_active = fx_swing_active(progress) && (!wood_style() || wood.combo.stage != 0 || progress >= 0.26f);
     return true;
 }
 static void wood_begin(patch_handle_t player, void **args, void *result, const patch_method_signature_t *sig) {
@@ -153,7 +192,7 @@ static void wood_begin(patch_handle_t player, void **args, void *result, const p
     if (!wood_can_animate(player, item)) { fx_combo_reset(&wood.combo); return; }
     wood_start(wood.slot(player, wood.ms), "actual-use");
     wood.length = 36;
-    if (!wood.logged) { wood.logged = true; note("Wooden sword combo started: forward / downward / upward; single-player only."); }
+    if (!wood.logged) { wood.logged = true; note("Weapon profiles ready: wooden sword / iron broadsword / copper shortsword / spear; single-player only."); }
 }
 static void wood_use_style(patch_handle_t player, void **args, void *result, const patch_method_signature_t *sig) {
     (void)result; (void)sig;
@@ -403,36 +442,53 @@ static void wood_vfx_load(void) {
         fx_image_free(&image);
     }
 }
+static Color weapon_tint(uint8_t r,uint8_t g,uint8_t b,uint8_t alpha) {
+    return (Color){alpha,b,g,r};
+}
 static void wood_vfx_emit(void *drawinfo, void *player, Vec2 draw_offset) {
-    if (!slash.ready || !wood.sample_active || !wood.combo.running) return;
+    if (!slash.ready || !wood.sample_active || !wood.combo.running || !wood.profile) return;
     wood_vfx_load();
-    unsigned stage = wood.combo.stage % 3;
+    unsigned stage=wood.combo.stage%3;
     if (!slash.sprites[stage].root.value) return;
-    void *texture = slash.target(&slash.sprites[stage].root,slash.mt);
+    void *texture=slash.target(&slash.sprites[stage].root,slash.mt);
     if (!texture) return;
-    float p = fx_swing_fraction(stage,wood.visual_progress);
-    float opacity = sinf(p*FX_PI)*0.92f;
-    if (opacity < 0.03f) return;
-    int direction = 1; patchlib_field_get_value(wood.direction,player,&direction);
-    float item_scale = wood.scale(player,wood.held(player,wood.mh),wood.mscale);
-    if (!isfinite(item_scale) || item_scale <= 0 || item_scale > 4) return;
-    Vec2 center = get_center(player,m_center), screen = get_screen(m_screen);
-    float width = wood.length*item_scale*(stage == 0 ? 1.15f : 1.25f);
-    float height = wood.length*item_scale*(stage == 0 ? 0.48f : 1.8f);
-    Vec2 position = {center.x + direction*7 - screen.x + draw_offset.x, center.y - screen.y + draw_offset.y};
-    if (stage == 1) position.y += (p-0.5f)*8;
-    if (stage == 2) position.y -= (p-0.5f)*8;
-    int w = slash.sprites[stage].width, h = slash.sprites[stage].height;
-    Vec2 origin = {direction > 0 ? w*0.05f : w*0.95f,h*0.5f};
-    Vec2 scale = {width/w,height/h};
-    uint8_t value = (uint8_t)(255*opacity);
-    Color tint = {value,value,value,value};
-    void *entry = wood_view.add(drawinfo,wood_view.madd);
-    if (!entry) return;
-    wood_view.set(entry,texture,position,tint,0,origin,scale,direction > 0 ? 0 : 1,0,wood_view.mset);
+    float p=fx_swing_fraction(stage,wood.visual_progress);
+    float envelope=sinf(p*FX_PI);
+    float opacity=fx_clamp(envelope*1.08f,0.0f,1.0f);
+    if(opacity<0.03f) return;
+    int direction=1; patchlib_field_get_value(wood.direction,player,&direction);
+    float item_scale=wood.scale(player,wood.held(player,wood.mh),wood.mscale);
+    if(!isfinite(item_scale)||item_scale<=0||item_scale>4) return;
+    Vec2 screen=get_screen(m_screen);
+    float local=weapon_local_angle(stage,wood.visual_progress);
+    float angle=fx_world_angle(weapon_project_angle(stage,local),direction);
+    float reach=wood.length*item_scale*weapon_reach(stage,local);
+    Vec2 position={wood.visual_hand.x+cosf(angle)*reach*0.58f-screen.x+draw_offset.x,
+                   wood.visual_hand.y+sinf(angle)*reach*0.58f-screen.y+draw_offset.y};
+    float radians=angle+FX_PI*0.5f;
+    int w=slash.sprites[stage].width,h=slash.sprites[stage].height;
+    Vec2 origin={w*0.5f,h*0.5f};
+    float base=wood.length*item_scale;
+    Vec2 scale={base*wood.profile->trail_width/w,base*wood.profile->trail_height/h};
+    uint8_t rr=wood.profile->red,gg=wood.profile->green,bb=wood.profile->blue;
+    Color outer=weapon_tint(rr,gg,bb,(uint8_t)(255*opacity*0.72f));
+    Color arc=weapon_tint(rr,gg,bb,(uint8_t)(255*opacity));
+    Color core=weapon_tint(255,245,225,(uint8_t)(255*opacity*0.98f));
+    Vec2 outer_scale={scale.x*1.42f,scale.y*1.52f};
+    Vec2 core_scale={scale.x*0.76f,scale.y*0.62f};
+    int flip=direction>0?0:1;
+    void *entry=wood_view.add(drawinfo,wood_view.madd);
+    if(!entry)return;
+    wood_view.set(entry,texture,position,outer,radians,origin,outer_scale,flip,0,wood_view.mset);
+    entry=wood_view.add(drawinfo,wood_view.madd);
+    if(!entry)return;
+    wood_view.set(entry,texture,position,arc,radians,origin,scale,flip,0,wood_view.mset);
+    entry=wood_view.add(drawinfo,wood_view.madd);
+    if(!entry)return;
+    wood_view.set(entry,texture,position,core,radians,origin,core_scale,flip,0,wood_view.mset);
     if (!slash.sprites[stage].logged) {
-        slash.sprites[stage].logged = true;
-        char line[140]; snprintf(line,sizeof(line),"Slash sprite emitted: stage=%u %s",stage+1,slash_names[stage]); note(line);
+        slash.sprites[stage].logged=true;
+        char line[180];snprintf(line,sizeof(line),"Bright layered slash emitted: %s stage=%u (outer/arc/core)",wood.profile->name,stage+1);note(line);
     }
 }
 static void wood_vfx_cleanup(void) {
@@ -487,6 +543,7 @@ static void wood_native_draw(void *drawinfo, const void *info) {
         !wood_read_vec(wood.location,player,&old_location) || !wood_read_vec(wood_view.location,drawinfo,&old_draw_location) ||
         !wood_read_vec(wood_view.position,drawinfo,&draw_position)) { wood_view.original(drawinfo,info); return; }
     bool swinging = animation > 0;
+    if (!swinging && !wood_style()) { wood_view.original(drawinfo,info); return; }
     if (swinging && !wood_pose(player,item)) { wood_view.original(drawinfo,info); return; }
     Vec2 center = get_center(player,m_center), hand;
     int pw = 0, ph = 0;

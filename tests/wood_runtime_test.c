@@ -190,7 +190,9 @@ int main(void) {
         facing=dir; wood.combo.stage=stage; wood.combo.running=true;
         wood.sample_active=true; wood.visual_progress=0.4f;
         cache_count=0; wood_vfx_emit(&draw_object,&player_object,(Vec2){0,0});
-        assert(cache_count==1 && cache_data[0].texture==fake(100+stage));
+        assert(cache_count==3 && cache_data[0].texture==fake(100+stage));
+        assert(cache_data[0].color.r != cache_data[1].color.r || cache_data[0].color.g != cache_data[1].color.g);
+        assert(cache_data[2].scale.x < cache_data[1].scale.x);
         assert(cache_data[0].effect==(dir<0 ? 1 : 0));
         assert(cache_data[0].scale.x>0 && cache_data[0].color.a>0);
     }
