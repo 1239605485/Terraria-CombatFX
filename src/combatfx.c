@@ -54,7 +54,7 @@ static float random_signed(void) {
     random_state ^= random_state << 5;
     return (float)(random_state & 65535u) / 32767.5f - 1.0f;
 }
-static bool match(patch_handle_t method, bool instance, patch_type_t result,
+bool match(patch_handle_t method, bool instance, patch_type_t result,
                   const patch_type_t *types, size_t count) {
     if (!method) return false;
     patch_method_signature_t s = {0};

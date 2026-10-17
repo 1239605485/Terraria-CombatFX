@@ -5,6 +5,9 @@
 #include <stdint.h>
 #include "patchlib/method.h"
 #include "patchlib/field.h"
+#include "patchlib/struct/array.h"
+#include "terraria/texture2d.h"
+#include "vfx_image.h"
 #include "combo_math.h"
 typedef FxPoint Vec2;
 typedef struct { uint8_t a, b, g, r; } Color;
@@ -27,6 +30,7 @@ extern patch_handle_t f_id, f_friendly, f_netmode, f_dust_count;
 extern char mod_resource_dir[1024];
 uint64_t now_ms(void);
 void note(const char *message);
+bool match(patch_handle_t method, bool instance, patch_type_t result, const patch_type_t *types, size_t count);
 patch_handle_t method(patch_handle_t type, const char *name, bool instance, patch_type_t result, const patch_type_t *args, size_t count);
 patch_handle_t field(patch_handle_t type, const char *name, size_t size, bool is_static);
 bool playing(void);
