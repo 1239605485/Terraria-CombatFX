@@ -47,8 +47,8 @@ static inline float fx_swing_progress(int remaining, int maximum) {
 static inline bool fx_swing_active(float p) { return p >= 0.16f && p <= 0.82f; }
 // Short preparation, accelerated cut, then visible recovery; each cut has its own rhythm.
 static inline float fx_swing_fraction(unsigned stage, float p) {
-    static const float start[] = {0.26f,0.22f,0.18f};
-    static const float finish[] = {0.76f,0.72f,0.62f};
+    static const float start[] = {0.22f,0.22f,0.22f};
+    static const float finish[] = {0.82f,0.82f,0.82f};
     stage %= 3;
     return fx_clamp((p-start[stage])/(finish[stage]-start[stage]),0,1);
 }
@@ -70,7 +70,7 @@ static inline float fx_project_length(unsigned stage, float angle) {
     return sqrtf(c*c + s*s);
 }
 static inline float fx_draw_lift(float p) {
-    float q = fx_clamp(p / 0.26f, 0, 1); return q*q*(3-2*q);
+    float q = fx_clamp(p / 0.22f, 0, 1); return q*q*(3-2*q);
 }
 typedef struct { float angle,reach,forward,hip; } FxPose;
 static inline float fx_ease(float t) { t=fx_clamp(t,0,1); return t*t*(3-2*t); }
@@ -83,7 +83,7 @@ static inline FxPose fx_pose(unsigned stage,float p) {
         pose.angle=2.55f+(pose.angle-2.55f)*t;
         pose.reach=0.55f+(pose.reach-0.55f)*t; pose.hip=1-t;
     }
-    static const float finish[]={0.76f,0.72f,0.62f};
+    static const float finish[]={0.82f,0.82f,0.82f};
     if(p>finish[stage]) {
         float t=fx_ease((p-finish[stage])/(1-finish[stage]));
         if(stage==0) { pose.angle+=(-1.35f-pose.angle)*t; pose.reach+=(1-pose.reach)*t; }

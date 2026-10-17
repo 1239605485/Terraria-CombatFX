@@ -2,9 +2,9 @@
   "pkgId": "liuxin.combatfx",
   "name": "武器打击反馈·三式刀光测试",
   "author": "liuxin",
-  "description": "木剑横砍→下劈→上挑：替换为tbbk的CC0像素刀光九帧素材，刀光跟随剑刃，统一动作收招与下招起手。保留制作界面动作隔离，需实机验证。",
-  "version": "0.4.2",
-  "versionCode": 6,
+  "description": "木剑三段攻击改为缓起手、快速挥击、缓收招；刀光缩小变淡并随剑刃切过。沿用原版木剑音色，三招仅轻微变调，避免叠加音效。保留制作界面隔离。",
+  "version": "0.4.3",
+  "versionCode": 7,
   "dependence": [],
   "support": {
     "android": {

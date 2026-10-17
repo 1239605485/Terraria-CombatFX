@@ -97,6 +97,8 @@ static void original_box(void *player, void *item, FxRect frame, bool *dont, FxR
     *dont = false; *box = (FxRect){1,2,3,4};
 }
 int main(void) {
+    assert(wood_swing_pitch(0)<wood_swing_pitch(1));
+    assert(wood_swing_pitch(1)<wood_swing_pitch(2));
     f_id = fake(1); f_netmode = fake(2);
     wood.type = fake(3); wood.animation = fake(4); wood.maximum = fake(5);
     wood.direction = fake(6); wood.gravity = fake(7); wood.dead = fake(8); wood.frozen = fake(9);
@@ -191,10 +193,10 @@ int main(void) {
         cache_count=0; wood_vfx_emit(&draw_object,&player_object,(Vec2){0,0});
         assert(cache_count==1 && cache_data[0].texture==fake(100+(unsigned)fx_clamp(fx_swing_fraction(stage,0.4f)*9,0,8)));
         assert(cache_data[0].effect==(((stage==2)!=(dir<0)) ? 2 : 0));
-        assert(cache_data[0].scale.x>0 && cache_data[0].color.a>0);
+        assert(cache_data[0].scale.x>0 && cache_data[0].color.a>0 && cache_data[0].color.a<=158);
         FxPose pose=fx_pose(stage,0.4f);
         float expected=fx_world_angle(pose.angle,dir);
-        assert(fabsf(cache_data[0].rotation-expected)<1e-5f);
+        assert(fabsf(cache_data[0].rotation-(expected+FX_PI*0.5f))<1e-5f);
         assert(fabsf(cache_data[0].position.x-(wood.visual_hand.x+cosf(expected)*wood.length*wood.visual_stretch*0.48f))<1e-4f);
     }
     wood.sample_active=false; cache_count=0;

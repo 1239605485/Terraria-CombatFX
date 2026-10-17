@@ -11,6 +11,10 @@ typedef void (*WoodArm)(void *, bool, int, float, const void *);
 typedef Vec2 (*WoodHand)(void *, int, float, const void *);
 typedef float (*WoodScale)(void *, void *, const void *);
 typedef FxRect (*WoodHitbox)(void *, const void *);
+typedef void *(*WoodSwingSound)(void *, Vec2, float, float, const void *);
+static float wood_swing_pitch(unsigned stage) {
+    static const float pitch[3]={-0.08f,0.0f,0.08f}; return pitch[stage%3];
+}
 static struct {
     bool ready, sample_active, logged;
     unsigned sequence_logs;
@@ -30,7 +34,8 @@ static struct {
     WoodScale scale;
     WoodHitbox hitbox;
     patch_handle_t mh, ms, ma, mhand, mscale, mbox;
-    patch_handle_t type, animation, maximum, rotation, location, direction, gravity, dead, frozen, npcs;
+    patch_handle_t type, animation, maximum, rotation, location, direction, gravity, dead, frozen, npcs, use_sound, play_sound;
+    WoodSwingSound swing_sound;
     void *addresses[6];
     WoodStartOriginal original_start;
     WoodStyleOriginal original_style;
@@ -215,8 +220,16 @@ static void wood_frame(patch_handle_t player, void **args, void *result, const p
 }
 // Typed native wrappers keep Rectangle's four ints out of kernel FFI conversion.
 static void wood_native_start(void *player, void *item, const void *info) {
-    wood.original_start(player, item, info);
-    void *args[] = {&item}; wood_begin(player, args, NULL, NULL);
+    bool custom_sound=wood.swing_sound && wood.use_sound && wood_local(player) && wood_item(item) && !wood.inventory_open(wood.minventory);
+    void *sound=NULL;
+    if(custom_sound) {
+        patchlib_field_get_value(wood.use_sound,item,&sound);
+        if(sound) { void *none=NULL; patchlib_field_set_value(wood.use_sound,item,&none); }
+    }
+    wood.original_start(player,item,info);
+    if(sound) patchlib_field_set_value(wood.use_sound,item,&sound);
+    void *args[] = {&item}; wood_begin(player,args,NULL,NULL);
+    if(sound && custom_sound) wood.swing_sound(sound,get_center(player,m_center),wood_swing_pitch(wood.combo.stage),0.82f,wood.play_sound);
 }
 static void wood_native_style(void *player, float mount, void *item, FxRect frame, const void *info) {
     wood.original_style(player, mount, item, frame, info);
@@ -253,6 +266,12 @@ static void wood_init(patch_handle_t main_type, patch_handle_t entity) {
     patch_handle_t player = patchlib_type_get_type("Terraria", "Player");
     patch_handle_t item = patchlib_type_get_type("Terraria", "Item");
     wood.type = field(item, "type", sizeof(int), false);
+    wood.use_sound = field(item,"UseSound",sizeof(void *),false);
+    patch_handle_t audio=patchlib_type_get_type("Terraria.Audio","SoundEngine");
+    patch_handle_t legacy=patchlib_type_get_type("Terraria.Audio","LegacySoundStyle");
+    const patch_type_t sound_args[]={PATCH_OBJECT,PATCH_STRUCT,PATCH_FLOAT,PATCH_FLOAT};
+    wood.play_sound=legacy ? method(audio,"PlaySound",false,PATCH_OBJECT,sound_args,4) : NULL;
+    if(wood.play_sound) wood.swing_sound=(WoodSwingSound)patchlib_method_get_pointer(wood.play_sound);
     wood.animation = field(player, "itemAnimation", sizeof(int), false);
     wood.maximum = field(player, "itemAnimationMax", sizeof(int), false);
     wood.rotation = field(player, "itemRotation", sizeof(float), false);
@@ -316,5 +335,5 @@ static void wood_init(patch_handle_t main_type, patch_handle_t entity) {
     wood.ready = true;
     wood.observed_animation = -1;
     wood_draw_init(main_type, player, entity);
-    note("Wood combo ready: item 24, 3 stages, 800ms idle reset, one successful hit per NPC per swing. Charge deferred.");
+    note("Wood combo ready: 3 stages, slow-fast-slow timing, one hit per NPC; original swing sound replayed once with subtle combo pitch when available.");
 }

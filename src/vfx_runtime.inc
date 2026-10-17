@@ -55,24 +55,25 @@ static void wood_vfx_emit(void *drawinfo, void *player, Vec2 draw_offset) {
     if (!slash.sprites[frame].root.value) return;
     void *texture=slash.target(&slash.sprites[frame].root,slash.mt);
     if(!texture) return;
-    float opacity = sinf(p*FX_PI)*0.92f;
+    float opacity = sinf(p*FX_PI)*0.62f;
     if (opacity < 0.03f) return;
     int direction = 1; patchlib_field_get_value(wood.direction,player,&direction);
     float item_scale = wood.scale(player,wood.held(player,wood.mh),wood.mscale);
     if (!isfinite(item_scale) || item_scale <= 0 || item_scale > 4) return;
     Vec2 screen=get_screen(m_screen);
     FxPose pose=fx_pose(stage,wood.visual_progress);
-    float angle=fx_world_angle(pose.angle,direction);
+    float blade_angle=fx_world_angle(pose.angle,direction);
+    float slash_angle=blade_angle+FX_PI*0.5f;
     float length=wood.length*item_scale*wood.visual_stretch;
-    Vec2 position={wood.visual_hand.x+cosf(angle)*length*0.48f-screen.x+draw_offset.x,
-                   wood.visual_hand.y+sinf(angle)*length*0.48f-screen.y+draw_offset.y};
+    Vec2 position={wood.visual_hand.x+cosf(blade_angle)*length*0.48f-screen.x+draw_offset.x,
+                   wood.visual_hand.y+sinf(blade_angle)*length*0.48f-screen.y+draw_offset.y};
     Vec2 origin={32,23.5f};
-    Vec2 scale={length*1.35f/64,length*(stage==0 ? 0.6f : 1.05f)/47};
+    Vec2 scale={length*0.92f/64,length*(stage==0 ? 0.34f : 0.55f)/47};
     uint8_t value = (uint8_t)(255*opacity);
     Color tint = {value,value,value,value};
     void *entry = wood_view.add(drawinfo,wood_view.madd);
     if (!entry) return;
-    wood_view.set(entry,texture,position,tint,angle,origin,scale,((stage==2) != (direction<0)) ? 2 : 0,0,wood_view.mset);
+    wood_view.set(entry,texture,position,tint,slash_angle,origin,scale,((stage==2) != (direction<0)) ? 2 : 0,0,wood_view.mset);
     if (!slash.sprites[stage].logged) {
         slash.sprites[stage].logged = true;
         char line[140]; snprintf(line,sizeof(line),"Slash sprite emitted: stage=%u %s",stage+1,slash_name); note(line);

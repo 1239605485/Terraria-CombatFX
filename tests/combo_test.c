@@ -15,9 +15,12 @@ int main(void) {
     assert(fx_combo_has_hit(&c, -1) && fx_combo_has_hit(&c, FX_COMBO_NPCS));
     assert(!fx_swing_active(0.0f) && !fx_swing_active(1.0f));
     assert(fx_swing_active(0.5f));
-    assert(fx_swing_fraction(0,0.26f)==0 && fx_swing_fraction(0,0.76f)==1);
-    assert(fx_swing_fraction(1,0.20f)==0);
-    assert(fx_swing_fraction(2,0.62f)==1);
+    assert(fx_swing_fraction(0,0.22f)==0 && fx_swing_fraction(0,0.82f)==1);
+    assert(fx_swing_fraction(1,0.22f)==0);
+    assert(fx_swing_fraction(2,0.82f)==1);
+    for(unsigned stage=0;stage<3;stage++) {
+        assert(fx_swing_fraction(stage,0.52f)>0.45f && fx_swing_fraction(stage,0.52f)<0.55f);
+    }
     assert(fx_swing_angle(0, 0.2f) < fx_swing_angle(0, 0.7f));
     assert(fx_swing_angle(1, 0.2f) < fx_swing_angle(1, 0.7f));
     assert(fx_swing_angle(2, 0.2f) > fx_swing_angle(2, 0.7f));
@@ -37,7 +40,7 @@ int main(void) {
         assert(fabsf(sinf(projected)*length-sinf(a)*0.30f) < 1e-5f);
         assert(fx_project_length(2,a) == 1);
     }
-    assert(fx_draw_lift(0) == 0 && fx_draw_lift(0.26f) == 1);
+    assert(fx_draw_lift(0) == 0 && fx_draw_lift(0.22f) == 1);
     // Every stage's recovery must meet the next entry without a pose/scale jump.
     for(unsigned stage=0;stage<3;stage++) {
         FxPose end=fx_pose(stage,1), start=fx_pose((stage+1)%3,0);
