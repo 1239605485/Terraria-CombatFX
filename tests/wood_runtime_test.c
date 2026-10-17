@@ -83,7 +83,8 @@ static void original_draw(void *draw, const void *m) {
     WoodDrawData *data = add_draw(draw,NULL);
     set_draw(data,&item_object,draw_location,(Color){255,255,255,255},item_rotation,(Vec2){0,32},(Vec2){live_scale,live_scale},0,0,NULL);
 }
-static Vec2 screen_get(const void *m) { (void)m; return (Vec2){0,0}; }
+static Vec2 screen_value;
+static Vec2 screen_get(const void *m) { (void)m; return screen_value; }
 static int released;
 static void *sprite_target(FxGCHandle *handle,const void *m) { (void)m; return (void *)handle->value; }
 static void sprite_free(FxGCHandle *handle,const void *m) { (void)m; assert(handle->value); ++released; }
@@ -181,7 +182,7 @@ int main(void) {
     animation = 21; assert(wood_pose(&player_object,&item_object)); assert(wood.combo.stage == 2);
     assert(wood_process_depth == 0);
     // Regression: animated frames follow the blade rather than flashing at a fixed player offset.
-    get_screen=screen_get; slash.ready=slash.tried=true;
+    get_screen=screen_get; slash.ready=slash.tried=true; screen_value=(Vec2){0,0};
     slash.target=sprite_target; slash.release=sprite_free;
     for(unsigned i=0;i<9;i++) {
         slash.sprites[i].root.value=(uintptr_t)fake(100+i);
@@ -199,6 +200,14 @@ int main(void) {
         assert(fabsf(cache_data[0].rotation-(expected+FX_PI*0.5f))<1e-5f);
         assert(fabsf(cache_data[0].position.x-(wood.visual_hand.x+cosf(expected)*wood.length*wood.visual_stretch*0.48f))<1e-4f);
     }
+    // Camera movement converts the world-space hand once; the held-item draw offset must not be added again.
+    screen_value=(Vec2){320,180}; cache_count=0;
+    wood_vfx_emit(&draw_object,&player_object,(Vec2){-320,-180});
+    FxPose camera_pose=fx_pose(wood.combo.stage,wood.visual_progress);
+    float camera_angle=fx_world_angle(camera_pose.angle,facing);
+    assert(fabsf(cache_data[0].position.x-(wood.visual_hand.x+cosf(camera_angle)*wood.length*wood.visual_stretch*0.48f-320))<1e-4f);
+    assert(fabsf(cache_data[0].position.y-(wood.visual_hand.y+sinf(camera_angle)*wood.length*wood.visual_stretch*0.48f-180))<1e-4f);
+    screen_value=(Vec2){0,0};
     wood.sample_active=false; cache_count=0;
     wood_vfx_emit(&draw_object,&player_object,(Vec2){0,0}); assert(cache_count==0);
     wood_vfx_cleanup(); assert(released==9 && !slash.ready);
