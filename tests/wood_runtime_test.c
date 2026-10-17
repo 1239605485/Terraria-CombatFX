@@ -83,6 +83,10 @@ static void original_draw(void *draw, const void *m) {
     WoodDrawData *data = add_draw(draw,NULL);
     set_draw(data,&item_object,draw_location,(Color){255,255,255,255},item_rotation,(Vec2){0,32},(Vec2){live_scale,live_scale},0,0,NULL);
 }
+static int effect_original_called;
+static void effect_layer_original(void *draw, const void *m) {
+    (void)m; assert(draw==&draw_object); ++effect_original_called;
+}
 static Vec2 screen_value;
 static Vec2 screen_get(const void *m) { (void)m; return screen_value; }
 static int released;
@@ -160,6 +164,7 @@ int main(void) {
     wood_view.player = fake(20); wood_view.item_scale = fake(21); wood_view.arm_rotation = fake(22);
     wood_view.shadow = fake(23); wood_view.count = fake(24); wood_view.cache = fake(25);
     wood_view.location = fake(26); wood_view.position = fake(27);
+    wood_view.effect_original = effect_layer_original;
     wood_view.player_width = fake(28); wood_view.player_height = fake(29);
     animation = 0; item_rotation = 0.23f; item_location = (Vec2){2,3};
     fx_combo_reset(&wood.combo); cache_count = 0;
@@ -211,6 +216,9 @@ int main(void) {
     assert(cache_count==3);
     assert(fabsf(cache_data[1].position.x-(wood.visual_hand.x+cosf(camera_angle)*wood.length*wood.visual_stretch*0.48f-320))<1e-4f);
     assert(fabsf(cache_data[1].position.y-(wood.visual_hand.y+sinf(camera_angle)*wood.length*wood.visual_stretch*0.48f-180))<1e-4f);
+    cache_count=0; effect_original_called=0;
+    wood_native_effect_draw(&draw_object,NULL);
+    assert(effect_original_called==1 && cache_count==3);
     screen_value=(Vec2){0,0};
     wood.sample_active=false; cache_count=0;
     wood_vfx_emit(&draw_object,&player_object,(Vec2){0,0}); assert(cache_count==0);

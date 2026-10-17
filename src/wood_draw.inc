@@ -15,8 +15,8 @@ typedef void *(*WoodAddDraw)(void *, const void *);
 typedef void (*WoodSetDraw)(void *, void *, Vec2, Color, float, Vec2, Vec2, int, int, const void *);
 static struct {
     bool ready, logged, busy;
-    void *address;
-    WoodDrawOriginal original;
+    void *address, *effect_address;
+    WoodDrawOriginal original, effect_original;
     WoodAddDraw add;
     WoodSetDraw set;
     patch_handle_t madd, mset;
@@ -106,11 +106,24 @@ static void wood_native_draw(void *drawinfo, const void *info) {
     patchlib_field_get_value(wood_view.count,drawinfo,&after);
     if (after <= before) return;
     if (!wood_view.logged) { wood_view.logged = true; note("Wood held-item draw layer emitted sword; waist/draw override active."); }
-    if (swinging) wood_vfx_emit(drawinfo,player,draw_offset);
+}
+// Render the slash after the game's arm-over-item layers. Layer 27 is followed
+// by layer 28, which draws the arm on top of a slash appended to layer 27.
+static void wood_native_effect_draw(void *drawinfo, const void *info) {
+    if (wood_view.effect_original) wood_view.effect_original(drawinfo,info);
+    if (!drawinfo || !wood.sample_active || !wood.combo.running) return;
+    void *player=NULL;
+    patchlib_field_get_value(wood_view.player,drawinfo,&player);
+    if (!wood_local(player)) return;
+    float shadow=0;
+    patchlib_field_get_value(wood_view.shadow,drawinfo,&shadow);
+    if (shadow>0) return;
+    wood_vfx_emit(drawinfo,player,(Vec2){0,0});
 }
 static void wood_draw_cleanup(void) {
     wood_view.ready = false;
     wood_vfx_cleanup();
+    if (wood_view.effect_address) DobbyDestroy(wood_view.effect_address);
     if (wood_view.address) DobbyDestroy(wood_view.address);
     memset(&wood_view,0,sizeof(wood_view));
 }
@@ -135,9 +148,10 @@ static void wood_draw_init(patch_handle_t main_type, patch_handle_t player, patc
     const patch_type_t draw_arg[] = {PATCH_OBJECT};
     const patch_type_t set_args[] = {PATCH_OBJECT,PATCH_STRUCT,PATCH_STRUCT,PATCH_FLOAT,PATCH_STRUCT,PATCH_STRUCT,PATCH_INT32,PATCH_INT32};
     patch_handle_t draw = method(layers,"DrawPlayer_27_HeldItem",false,PATCH_VOID,draw_arg,1);
+    patch_handle_t effect_draw = method(layers,"DrawPlayer_29_OnhandAcc",false,PATCH_VOID,draw_arg,1);
     wood_view.madd = method(set,"AddDrawData",true,PATCH_POINTER,NULL,0);
     wood_view.mset = wood_overload(data,"Set",set_args,8);
-    if (!draw || !wood_view.madd || !wood_view.mset || !wood_view.player || !wood_view.position || !wood_view.location ||
+    if (!draw || !effect_draw || !wood_view.madd || !wood_view.mset || !wood_view.player || !wood_view.position || !wood_view.location ||
         !wood_view.arm_rotation || !wood_view.shadow || !wood_view.cache || !wood_view.count || !wood_view.item_scale ||
         !wood_view.player_width || !wood_view.player_height) { note("Wood draw override unavailable: field/method mismatch."); return; }
     wood_view.add = (WoodAddDraw)patchlib_method_get_pointer(wood_view.madd);
@@ -147,6 +161,11 @@ static void wood_draw_init(patch_handle_t main_type, patch_handle_t player, patc
         note("Wood draw override unavailable: native hook failed."); return;
     }
     wood_view.address = address; wood_view.ready = true;
+    void *effect_address=patchlib_method_get_pointer(effect_draw);
+    if (effect_address && DobbyHook(effect_address,(void *)wood_native_effect_draw,(void **)&wood_view.effect_original)==0) {
+        wood_view.effect_address=effect_address;
+        note("Slash draw layer ready: trail renders in front of the player's arm.");
+    } else note("Slash foreground hook unavailable: effects may be covered by the player's arm.");
     wood_vfx_init();
     note("Wood draw override ready: waist carry, first-hit unsheathing, forward/down/up moves with CC0 animated slash frames.");
 }
