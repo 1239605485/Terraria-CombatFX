@@ -73,10 +73,25 @@ static void wood_vfx_emit(void *drawinfo, void *player, Vec2 draw_offset) {
     Vec2 origin={32,23.5f};
     Vec2 scale={length*0.92f/64,length*(stage==0 ? 0.34f : 0.55f)/47};
     uint8_t value = (uint8_t)(255*opacity);
-    Color tint = {value,value,value,value};
-    void *entry = wood_view.add(drawinfo,wood_view.madd);
+    int flip=((stage==2) != (direction<0)) ? 2 : 0;
+    // Follow the layered sword trail used by tModLoader's Excalibur example:
+    // broad low-opacity color, the full slash, then a narrow bright core.
+    // Keep this to three cached sprites per active swing for mobile performance.
+    Color outer={(uint8_t)(value*0.34f),48,128,255};
+    Color tint={value,value,value,value};
+    uint8_t core_alpha=(uint8_t)(value*0.52f);
+    Color core={core_alpha,core_alpha,core_alpha,core_alpha};
+    Vec2 outer_scale={scale.x*1.10f,scale.y*1.14f};
+    Vec2 core_scale={scale.x*0.72f,scale.y*0.58f};
+    void *entry=wood_view.add(drawinfo,wood_view.madd);
     if (!entry) return;
-    wood_view.set(entry,texture,position,tint,slash_angle,origin,scale,((stage==2) != (direction<0)) ? 2 : 0,0,wood_view.mset);
+    wood_view.set(entry,texture,position,outer,slash_angle,origin,outer_scale,flip,0,wood_view.mset);
+    entry=wood_view.add(drawinfo,wood_view.madd);
+    if (!entry) return;
+    wood_view.set(entry,texture,position,tint,slash_angle,origin,scale,flip,0,wood_view.mset);
+    entry=wood_view.add(drawinfo,wood_view.madd);
+    if (!entry) return;
+    wood_view.set(entry,texture,position,core,slash_angle,origin,core_scale,flip,0,wood_view.mset);
     if (!slash.sprites[stage].logged) {
         slash.sprites[stage].logged = true;
         char line[140]; snprintf(line,sizeof(line),"Slash sprite emitted: stage=%u %s",stage+1,slash_name); note(line);
