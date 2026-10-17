@@ -37,4 +37,7 @@ bool playing(void);
 void wood_init(patch_handle_t main_type, patch_handle_t entity);
 void wood_cleanup(void);
 void wood_record_hit(patch_handle_t npc, void *result);
+void weapon_modules_init(patch_handle_t main_type, patch_handle_t entity);
+void weapon_modules_cleanup(void);
+void weapon_modules_on_hit(patch_handle_t npc, void *result);
 #endif

@@ -116,7 +116,7 @@ static void camera_postfix(patch_handle_t instance, void **args, void *result, c
 }
 static void hit_postfix(patch_handle_t npc, void **args, void *result, const patch_method_signature_t *sig) {
     (void)sig;
-    wood_record_hit(npc, result);
+    weapon_modules_on_hit(npc, result);
     if (!enabled || busy || !npc || !args || !result || *(int *)result <= 0) return;
     if (!args[0] || !args[3] || !args[4] || !args[5]) return;
     if (*(int *)args[0] <= 0 || *(bool *)args[4] || !playing()) return;
@@ -221,13 +221,13 @@ static void init_mod(kernel_mod_handle_t *handle) {
         note("Disabled: could not install hit hook."); return;
     }
     enabled = true;
-    wood_init(main_type, entity);
+    weapon_modules_init(main_type, entity);
     note(camera_hook == PATCH_HOOK_INVALID_ID ? "Ready: particles only; camera API unavailable." :
          "Ready: particles + camera; 90 particles/sec budget, 12 burst capacity, 65ms per-target cooldown.");
 }
 static void cleanup_mod(kernel_mod_handle_t *handle) {
     (void)handle;
-    wood_cleanup();
+    weapon_modules_cleanup();
     enabled = false;
     if (patchlib_uninstall_hook) {
         if (hit_hook != PATCH_HOOK_INVALID_ID) patchlib_uninstall_hook(hit_hook);
