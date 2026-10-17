@@ -47,14 +47,14 @@ static inline float fx_swing_progress(int remaining, int maximum) {
 static inline bool fx_swing_active(float p) { return p >= 0.16f && p <= 0.82f; }
 // Short preparation, accelerated cut, then visible recovery; each cut has its own rhythm.
 static inline float fx_swing_fraction(unsigned stage, float p) {
-    static const float start[] = {0.16f,0.22f,0.18f};
-    static const float finish[] = {0.64f,0.72f,0.62f};
+    static const float start[] = {0.26f,0.22f,0.18f};
+    static const float finish[] = {0.76f,0.72f,0.62f};
     stage %= 3;
     return fx_clamp((p-start[stage])/(finish[stage]-start[stage]),0,1);
 }
 static inline float fx_swing_angle(unsigned stage, float p) {
-    static const float begin[] = {-0.70f, -1.35f, 1.35f};
-    static const float end[] = {0.70f, 1.35f, -1.35f};
+    static const float begin[] = {-1.15f, -1.35f, 1.35f};
+    static const float end[] = {1.15f, 1.35f, -1.35f};
     stage %= 3;
     float q = fx_swing_fraction(stage,p);
     q = q * q * (3 - 2 * q);
@@ -62,15 +62,15 @@ static inline float fx_swing_angle(unsigned stage, float p) {
 }
 // Side-view projection distinguishes horizontal sweeps from an overhead chop.
 static inline float fx_project_angle(unsigned stage, float angle) {
-    return stage % 3 != 0 ? angle : atan2f(sinf(angle) * 0.22f, cosf(angle));
+    return stage % 3 != 0 ? angle : atan2f(sinf(angle) * 0.30f, cosf(angle));
 }
 static inline float fx_project_length(unsigned stage, float angle) {
     if (stage % 3 != 0) return 1;
-    float c = cosf(angle), s = sinf(angle) * 0.22f;
+    float c = cosf(angle), s = sinf(angle) * 0.30f;
     return sqrtf(c*c + s*s);
 }
 static inline float fx_draw_lift(float p) {
-    float q = fx_clamp(p / 0.16f, 0, 1); return q*q*(3-2*q);
+    float q = fx_clamp(p / 0.26f, 0, 1); return q*q*(3-2*q);
 }
 static inline float fx_world_angle(float local_angle, int direction) { return direction > 0 ? local_angle : FX_PI - local_angle; }
 // Clip the blade segment against an expanded NPC rectangle (slab intersection).

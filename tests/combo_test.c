@@ -15,7 +15,7 @@ int main(void) {
     assert(fx_combo_has_hit(&c, -1) && fx_combo_has_hit(&c, FX_COMBO_NPCS));
     assert(!fx_swing_active(0.0f) && !fx_swing_active(1.0f));
     assert(fx_swing_active(0.5f));
-    assert(fx_swing_fraction(0,0.16f)==0 && fx_swing_fraction(0,0.64f)==1);
+    assert(fx_swing_fraction(0,0.26f)==0 && fx_swing_fraction(0,0.76f)==1);
     assert(fx_swing_fraction(1,0.20f)==0);
     assert(fx_swing_fraction(2,0.62f)==1);
     assert(fx_swing_angle(0, 0.2f) < fx_swing_angle(0, 0.7f));
@@ -34,10 +34,10 @@ int main(void) {
         float a = -FX_PI + i * 2 * FX_PI / 100;
         float projected = fx_project_angle(0,a), length = fx_project_length(0,a);
         assert(fabsf(cosf(projected)*length-cosf(a)) < 1e-5f);
-        assert(fabsf(sinf(projected)*length-sinf(a)*0.22f) < 1e-5f);
+        assert(fabsf(sinf(projected)*length-sinf(a)*0.30f) < 1e-5f);
         assert(fx_project_length(2,a) == 1);
     }
-    assert(fx_draw_lift(0) == 0 && fx_draw_lift(0.16f) == 1);
+    assert(fx_draw_lift(0) == 0 && fx_draw_lift(0.26f) == 1);
     FxBlade blade = {{0,0},{40,0}};
     assert(fx_blade_intersects(blade,(FxRect){20,-2,4,4},0));
     assert(!fx_blade_intersects(blade,(FxRect){20,10,4,4},2));

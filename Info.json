@@ -2,9 +2,9 @@
   "pkgId": "liuxin.combatfx",
   "name": "武器打击反馈·三式刀光测试",
   "author": "liuxin",
-  "description": "单人正常重力：木剑前方横砍→下劈→上挑循环；三张独立透明刀光PNG随招式绘制，运行时最长边256像素缓存。保留腰间拔刀和命中反馈。蓄力未加入，需实机验证。",
-  "version": "0.4.0",
-  "versionCode": 4,
+  "description": "制作闪退排查版：背包/制作界面打开时绕过全部木剑动作修改；延长拔剑动作并扩大前方横砍幅度。保留三式PNG刀光，闪退根因仍待实机验证。",
+  "version": "0.4.1",
+  "versionCode": 5,
   "dependence": [],
   "support": {
     "android": {

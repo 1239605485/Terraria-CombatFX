@@ -1,6 +1,8 @@
 #define _POSIX_C_SOURCE 200809L
 #include <assert.h>
 #include "../src/combatfx.c"
+static bool inventory_is_open;
+static bool inventory_state(const void *m) { (void)m; return inventory_is_open; }
 static int player_object, other_object, item_object, npc_object, array_object;
 static Vec2 center_get(void *p, const void *m) { (void)p; (void)m; return (Vec2){100,100}; }
 static int item_type = 24, animation = 21, maximum = 21, slot_number, facing = 1, mode;
@@ -77,7 +79,7 @@ static void *add_draw(void *draw, const void *m) {
     (void)m; assert(draw == &draw_object && cache_count < 16); return &cache_data[cache_count++];
 }
 static void original_draw(void *draw, const void *m) {
-    (void)m; assert(draw == &draw_object && animation > 0);
+    (void)m; assert(draw == &draw_object && (animation > 0 || inventory_is_open));
     WoodDrawData *data = add_draw(draw,NULL);
     set_draw(data,&item_object,draw_location,(Color){255,255,255,255},item_rotation,(Vec2){0,32},(Vec2){live_scale,live_scale},0,0,NULL);
 }
@@ -103,7 +105,7 @@ int main(void) {
     patchlib_field_get_value = get; patchlib_field_set_value = set; patchlib_field_get_pointer = pointer;
     patchlib_array_length = array_length; patchlib_array_at = array_at;
     wood.held = held; wood.slot = slot; wood.arm = arm; wood.hand = hand; wood.scale = scale; wood.hitbox = hitbox;
-    wood.ready = true; fx_combo_reset(&wood.combo);
+    wood.inventory_open=inventory_state; wood.ready = true; fx_combo_reset(&wood.combo);
     void *item = &item_object; void *begin_args[] = {&item};
     wood_begin(&player_object,begin_args,NULL,NULL); assert(wood.combo.stage == 0);
     FxRect frame = {0,0,32,32}, box = {0}; bool dont_attack = false;
@@ -194,5 +196,16 @@ int main(void) {
     wood.sample_active=false; cache_count=0;
     wood_vfx_emit(&draw_object,&player_object,(Vec2){0,0}); assert(cache_count==0);
     wood_vfx_cleanup(); assert(released==3 && !slash.ready);
+    // Regression: crafting a sword must never call the forced idle draw or alter shared item state.
+    inventory_is_open=true;
+    assert(!wood_can_animate(&player_object,&item_object));
+    assert(!wood.combo.valid && !wood.sample_active);
+    animation=0; cache_count=0; live_scale=1; item_rotation=0.23f;
+    item_location=(Vec2){2,3}; draw_location=(Vec2){4,5};
+    wood_native_draw(&draw_object,NULL);
+    assert(animation==0 && live_scale==1 && item_rotation==0.23f);
+    assert(item_location.x==2 && draw_location.x==4);
+    assert(cache_count==1 && cache_data[0].scale.x==1);
+    inventory_is_open=false; assert(wood_can_animate(&player_object,&item_object));
     return 0;
 }

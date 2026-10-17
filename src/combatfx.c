@@ -181,7 +181,7 @@ static void init_mod(kernel_mod_handle_t *handle) {
         char path[1024]; int n = snprintf(path, sizeof(path), "%s/combatfx_runtime.log", handle->private_dir);
         if (n > 0 && (size_t)n < sizeof(path)) runtime_log = fopen(path, "w");
     }
-    note("CombatFX 0.4.0 Android test build; target runtime 1.4.5.8.6. No item registration.");
+    note("CombatFX 0.4.1 Android test build; target runtime 1.4.5.8.6. No item registration.");
     if (!api_ready()) { note("Disabled: required kernel API unavailable."); return; }
     patch_handle_t main_type = patchlib_type_get_type("Terraria", "Main");
     patch_handle_t npc_type = patchlib_type_get_type("Terraria", "NPC");
@@ -252,7 +252,7 @@ static void cleanup_mod(kernel_mod_handle_t *handle) {
     if (runtime_log) { fclose(runtime_log); runtime_log = NULL; }
 }
 static kernel_mod_info_t *get_info(void) {
-    static kernel_mod_info_t info = {"liuxin.combatfx", 4, 1, "0.4.0"}; return &info;
+    static kernel_mod_info_t info = {"liuxin.combatfx", 5, 1, "0.4.1"}; return &info;
 }
 kernel_mod_ops_t *create_kernel_mod(void) {
     static kernel_mod_ops_t ops = {init_mod, cleanup_mod, get_info}; return &ops;

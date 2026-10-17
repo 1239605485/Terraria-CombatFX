@@ -20,6 +20,9 @@ static struct {
     FxCombo combo;
     FxBlade blades[FX_SWEEP_SAMPLES];
     float length, padding;
+    GetBool inventory_open;
+    patch_handle_t minventory;
+    bool ui_logged;
     WoodHeld held;
     WoodSlot slot;
     WoodArm arm;
@@ -54,6 +57,12 @@ static bool wood_item(patch_handle_t item) {
 }
 static bool wood_can_animate(patch_handle_t player, patch_handle_t item) {
     if (!wood_local(player) || !wood_item(item)) return false;
+    // Crafting shares live item instances: never override weapon pose/scale while inventory UI owns them.
+    if (!wood.inventory_open || wood.inventory_open(wood.minventory)) {
+        if (!wood.ui_logged) { note("Wood overrides bypassed: inventory/crafting open or state unavailable."); wood.ui_logged=true; }
+        wood.sample_active=false; fx_combo_reset(&wood.combo); return false;
+    }
+    wood.ui_logged=false;
     float gravity = 0; bool dead = true, frozen = true;
     patchlib_field_get_value(wood.gravity, player, &gravity);
     patchlib_field_get_value(wood.dead, player, &dead);
@@ -89,7 +98,7 @@ static bool wood_pose(patch_handle_t player, patch_handle_t item) {
     if (!isfinite(scale) || scale <= 0 || scale > 4) return false;
     float local_angle = fx_swing_angle(wood.combo.stage, progress);
     float pose_angle = fx_project_angle(wood.combo.stage, local_angle);
-    if (wood.combo.stage == 0 && progress < 0.16f)
+    if (wood.combo.stage == 0 && progress < 0.26f)
         pose_angle = 2.55f + (pose_angle - 2.55f) * fx_draw_lift(progress);
     float world_angle = fx_world_angle(pose_angle, direction);
     float arm_angle = world_angle - FX_PI * 0.5f;
@@ -97,18 +106,19 @@ static bool wood_pose(patch_handle_t player, patch_handle_t item) {
     wood.arm(player, true, 0, arm_angle, wood.ma);
     Vec2 hand = wood.hand(player, 0, arm_angle, wood.mhand);
     if (!isfinite(hand.x) || !isfinite(hand.y) || fabsf(hand.x) > 1e8f || fabsf(hand.y) > 1e8f) return false;
-    if (wood.combo.stage == 0 && progress < 0.16f) {
+    if (wood.combo.stage == 0 && progress < 0.26f) {
         Vec2 center = get_center(player, m_center);
         float lift = fx_draw_lift(progress);
         Vec2 hip = {center.x + direction * 5, center.y + 5};
         hand.x = hip.x + (hand.x - hip.x) * lift;
         hand.y = hip.y + (hand.y - hip.y) * lift;
     }
+    if (wood.combo.stage == 0) hand.x += direction*8*fx_swing_fraction(0,progress);
     float rotation = direction * (pose_angle + FX_PI * 0.25f);
     wood.visual_hand = hand; wood.visual_rotation = rotation; wood.visual_progress = progress;
     wood.arm_rotation = arm_angle;
     wood.visual_stretch = fx_project_length(wood.combo.stage,local_angle);
-    if (wood.combo.stage == 0 && progress < 0.16f)
+    if (wood.combo.stage == 0 && progress < 0.26f)
         wood.visual_stretch = 0.55f + (wood.visual_stretch - 0.55f) * fx_draw_lift(progress);
     void *location = patchlib_field_get_pointer(wood.location, player);
     if (!location) return false;
@@ -124,10 +134,11 @@ static bool wood_pose(patch_handle_t player, patch_handle_t item) {
         float reach = wood.length * scale * fx_project_length(wood.combo.stage,a);
         Vec2 h = wood.hand(player, 0, angle - FX_PI * 0.5f, wood.mhand);
         if (!isfinite(h.x) || !isfinite(h.y) || fabsf(h.x) > 1e8f || fabsf(h.y) > 1e8f) return false;
+        if (wood.combo.stage == 0) h.x += direction*8*fx_swing_fraction(0,t);
         wood.blades[i].hand = h;
         wood.blades[i].tip = (Vec2){h.x + cosf(angle) * reach, h.y + sinf(angle) * reach};
     }
-    wood.sample_active = fx_swing_active(progress);
+    wood.sample_active = fx_swing_active(progress) && (wood.combo.stage != 0 || progress >= 0.26f);
     return true;
 }
 static void wood_begin(patch_handle_t player, void **args, void *result, const patch_method_signature_t *sig) {
@@ -260,6 +271,8 @@ static void wood_init(patch_handle_t main_type, patch_handle_t entity) {
     wood.dead = field(player, "dead", sizeof(bool), false);
     wood.frozen = field(player, "frozen", sizeof(bool), false);
     wood.npcs = field(main_type, "npc", sizeof(void *), true);
+    wood.minventory = method(main_type,"get_playerInventory",false,PATCH_BOOL,NULL,0);
+    wood.inventory_open = wood.minventory ? (GetBool)patchlib_method_get_pointer(wood.minventory) : NULL;
     const patch_type_t arm_args[] = {PATCH_BOOL, PATCH_INT32, PATCH_FLOAT};
     const patch_type_t hand_args[] = {PATCH_INT32, PATCH_FLOAT};
     const patch_type_t item_arg[] = {PATCH_OBJECT};
@@ -269,7 +282,7 @@ static void wood_init(patch_handle_t main_type, patch_handle_t entity) {
     wood.mhand = method(player, "GetFrontHandPosition", true, PATCH_STRUCT, hand_args, 2);
     wood.mscale = method(player, "GetAdjustedItemScale", true, PATCH_FLOAT, item_arg, 1);
     wood.mbox = method(entity, "get_Hitbox", true, PATCH_STRUCT, NULL, 0);
-    if (!wood.type || !wood.animation || !wood.maximum || !wood.rotation || !wood.location ||
+    if (!wood.inventory_open || !wood.type || !wood.animation || !wood.maximum || !wood.rotation || !wood.location ||
         patchlib_field_is_static(wood.location) || !wood.direction || !wood.gravity || !wood.dead || !wood.frozen || !wood.npcs ||
         !wood.mh || !wood.ms || !wood.ma || !wood.mhand || !wood.mscale || !wood.mbox) {
         note("Wood combo disabled: player field or method mismatch."); return;
